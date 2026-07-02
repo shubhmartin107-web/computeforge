@@ -1,0 +1,111 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import typer
+from rich.console import Console
+from rich.table import Table
+
+from computeforge.models.config import EngineConfig
+from computeforge.safety.permissions import CapabilityRegistry
+from computeforge.safety.policies import PolicyEngine
+
+console = Console()
+
+
+def config_command(
+    action: str = typer.Argument("show", help="Action: show, set, reset, caps, policies"),
+    key: str | None = typer.Option(None, "--key", "-k", help="Config key to set"),
+    value: str | None = typer.Option(None, "--value", "-v", help="Config value to set"),
+):
+    """Manage ComputeForge configuration."""
+    if action == "show":
+        config = EngineConfig()
+        table = Table(title="ComputeForge Configuration")
+        table.add_column("Section", style="cyan")
+        table.add_column("Key", style="green")
+        table.add_column("Value", style="white")
+
+        config_dict = config.model_dump()
+        for section, values in config_dict.items():
+            if isinstance(values, dict):
+                for k, v in values.items():
+                    table.add_row(section, k, str(v))
+            else:
+                table.add_row("root", section, str(values))
+
+        console.print(table)
+
+    elif action == "caps":
+        registry = CapabilityRegistry()
+        caps = registry.list()
+        table = Table(title=f"Capabilities ({len(caps)} registered)")
+        table.add_column("Name", style="cyan")
+        table.add_column("Category", style="green")
+        table.add_column("Risk", style="yellow")
+        table.add_column("Permissions", style="blue")
+        table.add_column("Description", style="white")
+
+        for cap in caps:
+            risk_color = {
+                "low": "green",
+                "medium": "yellow",
+                "high": "red",
+                "critical": "bold red",
+            }.get(cap.risk_level.value, "white")
+            table.add_row(
+                cap.name,
+                cap.category,
+                f"[{risk_color}]{cap.risk_level.value}[/{risk_color}]",
+                ", ".join(cap.required_permissions) if cap.required_permissions else "-",
+                cap.description[:60],
+            )
+        console.print(table)
+
+    elif action == "policies":
+        engine = PolicyEngine()
+        from computeforge.safety.policies import PolicyDecision
+        table = Table(title="Default Policies")
+        table.add_column("Rule", style="cyan")
+        table.add_column("Threshold", style="yellow")
+        table.add_column("Decision", style="green")
+        table.add_column("Reason", style="white")
+
+        for rule in engine._policies.get("default", type("obj", (object,), {"rules": []})).rules:
+            decision_color = {
+                PolicyDecision.ALLOW: "green",
+                PolicyDecision.DENY: "red",
+                PolicyDecision.REQUIRE_CONFIRMATION: "yellow",
+            }.get(rule.decision, "white")
+            table.add_row(
+                rule.action_type,
+                rule.risk_threshold,
+                f"[{decision_color}]{rule.decision.value}[/{decision_color}]",
+                ", ".join(rule.reasons),
+            )
+        console.print(table)
+
+    elif action == "set":
+        if not key or not value:
+            console.print("[red]Error: --key and --value are required for 'set' action[/red]")
+            raise typer.Exit(code=1)
+        config_path = Path.home() / ".computeforge" / "config.json"
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        existing = {}
+        if config_path.exists():
+            existing = json.loads(config_path.read_text())
+        existing[key] = value
+        config_path.write_text(json.dumps(existing, indent=2))
+        console.print(f"[green]Config saved to {config_path}:[/green] {key} = {value}")
+
+    elif action == "reset":
+        config_path = Path.home() / ".computeforge" / "config.json"
+        if config_path.exists():
+            config_path.unlink()
+        console.print("[green]Configuration reset to defaults.[/green]")
+
+    else:
+        console.print(f"[red]Unknown action: {action}.[/red]")
+        console.print("Available actions: show, set, reset, caps, policies")
+        raise typer.Exit(code=1)

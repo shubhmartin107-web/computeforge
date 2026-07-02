@@ -1,0 +1,42 @@
+policies:
+  - name: restricted
+    description: Strict policy for production/high-security environments
+    version: "1.0"
+    enabled: true
+    default_decision: deny
+
+    rules:
+      - action_type: navigate
+        risk_threshold: low
+        decision: allow
+        priority: 100
+        reasons:
+          - Only low-risk navigation allowed
+      - action_type: click
+        risk_threshold: low
+        decision: allow
+        priority: 90
+        reasons:
+          - Only low-risk clicks allowed
+      - action_type: screenshot
+        risk_threshold: low
+        decision: allow
+        priority: 80
+        reasons:
+          - Screenshots allowed
+      - action_type: extract_text
+        risk_threshold: low
+        decision: allow
+        priority: 70
+        reasons:
+          - Text extraction allowed
+
+    rate_limit:
+      max_actions_per_minute: 10
+      max_actions_per_session: 50
+
+    domain_rules:
+      - pattern: "*"
+        allow: true
+        require_confirmation_for:
+          - navigate

@@ -1,0 +1,61 @@
+policies:
+  - name: default
+    description: Default ComputeForge safety policies
+    version: "1.0"
+    enabled: true
+    default_decision: allow
+    rate_limit:
+      max_actions_per_minute: 30
+      max_actions_per_session: 200
+
+    rules:
+      - action_type: evaluate
+        risk_threshold: medium
+        decision: deny
+        priority: 100
+        reasons:
+          - JavaScript execution restricted by default policy
+
+      - action_type: desktop_click
+        risk_threshold: medium
+        decision: require_confirmation
+        priority: 90
+        reasons:
+          - Desktop clicks require human confirmation
+
+      - action_type: desktop_type
+        risk_threshold: medium
+        decision: require_confirmation
+        priority: 90
+        reasons:
+          - Desktop typing requires human confirmation
+
+      - action_type: desktop_keypress
+        risk_threshold: medium
+        decision: require_confirmation
+        priority: 90
+        reasons:
+          - Desktop keypress requires human confirmation
+
+      - action_type: desktop_screenshot
+        risk_threshold: high
+        decision: require_confirmation
+        priority: 80
+        reasons:
+          - Desktop screenshots may capture sensitive information
+
+      - action_type: navigate
+        risk_threshold: critical
+        decision: deny
+        priority: 70
+        reasons:
+          - Navigation to critical-risk URLs blocked (file://, javascript:, etc.)
+
+    domain_rules:
+      - pattern: "*.local"
+        allow: false
+        reasons:
+          - Local network sites blocked by default
+      - pattern: "localhost"
+        allow: true
+        max_actions: 50

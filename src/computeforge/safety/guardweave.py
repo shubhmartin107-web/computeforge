@@ -1,0 +1,107 @@
+from __future__ import annotations
+
+import logging
+from typing import Any
+
+from computeforge.core.actions import ActionRequest
+from computeforge.core.exceptions import SafetyBlocked
+
+logger = logging.getLogger("computeforge.safety.guardweave")
+
+
+class GuardWeaveAdapter:
+    """Adapter to delegate safety policy decisions to GuardWeave.
+
+    GuardWeave is a safety, guardrails, and governance layer for AI agents.
+    This adapter forwards action assessments to GuardWeave's policy engine
+    if the package is installed and configured.
+    """
+
+    def __init__(self, endpoint: str | None = None, api_key: str | None = None):
+        self._endpoint = endpoint
+        self._api_key = api_key
+        self._enabled = False
+        self._client: Any = None
+
+    @property
+    def enabled(self) -> bool:
+        return self._enabled
+
+    async def connect(self) -> None:
+        if self._endpoint:
+            try:
+                import httpx
+                self._client = httpx.AsyncClient(
+                    base_url=self._endpoint,
+                    headers={"Authorization": f"Bearer {self._api_key}"} if self._api_key else {},
+                    timeout=5.0,
+                )
+                self._enabled = True
+                logger.info(f"Connected to GuardWeave at {self._endpoint}")
+            except Exception as e:
+                logger.warning(f"Failed to connect to GuardWeave: {e}")
+        else:
+            try:
+                from guardweave import PolicyEngine as GWPolicyEngine
+                self._gw_engine = GWPolicyEngine()
+                self._enabled = True
+                logger.info("Using local GuardWeave policy engine")
+            except ImportError:
+                logger.info("GuardWeave not available (pip install guardweave for integration)")
+
+    async def close(self) -> None:
+        if self._client:
+            await self._client.aclose()
+            self._client = None
+        self._gw_engine = None
+        self._enabled = False
+
+    async def assess(self, request: ActionRequest) -> dict[str, Any]:
+        """Assess an action using GuardWeave. Returns decision info."""
+        if not self._enabled:
+            return {"allowed": True, "decision": "allow", "source": "bypass"}
+
+        action_data = {
+            "type": request.type.value if hasattr(request.type, "value") else str(request.type),
+            "params": request.params,
+            "id": request.id,
+        }
+
+        if self._client:
+            try:
+                resp = await self._client.post("/api/v1/assess", json=action_data)
+                return resp.json()
+            except Exception as e:
+                logger.warning(f"GuardWeave request failed: {e}")
+                return {"allowed": True, "decision": "allow", "source": "fallback"}
+
+        if hasattr(self, "_gw_engine"):
+            try:
+                result = self._gw_engine.evaluate(action_data)
+                return {
+                    "allowed": result.get("allowed", True),
+                    "decision": result.get("decision", "allow"),
+                    "source": "guardweave_local",
+                    "risk_score": result.get("risk_score"),
+                    "reason": result.get("reason"),
+                }
+            except Exception as e:
+                logger.warning(f"GuardWeave local eval failed: {e}")
+                return {"allowed": True, "decision": "allow", "source": "fallback"}
+
+        return {"allowed": True, "decision": "allow", "source": "bypass"}
+
+    def make_safety_hook(self):
+        """Create a hook function for ComputeEngine compatibility."""
+        adapter = self
+
+        async def guardweave_hook(request: ActionRequest) -> None:
+            result = await adapter.assess(request)
+            if not result.get("allowed", True):
+                raise SafetyBlocked(
+                    action_type=request.type.value if hasattr(request.type, "value") else str(request.type),
+                    reason=result.get("reason", "Blocked by GuardWeave"),
+                    policy="guardweave",
+                )
+
+        return guardweave_hook

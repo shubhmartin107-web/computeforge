@@ -1,0 +1,135 @@
+from __future__ import annotations
+
+import logging
+from typing import Any
+
+from computeforge.core.exceptions import PluginError
+
+logger = logging.getLogger("computeforge.extensibility.skillforge")
+
+
+class SkillForgeAdapter:
+    """Adapter to resolve and execute skills from SkillForge.
+
+    SkillForge is a reusable agent skills registry and runtime.
+    This adapter allows ComputeForge to discover, load, and execute
+    skills that involve computer-use actions.
+    """
+
+    def __init__(self, endpoint: str | None = None, local: bool = True):
+        self._endpoint = endpoint
+        self._local = local
+        self._enabled = False
+        self._client: Any = None
+        self._skillforge_available = False
+
+    @property
+    def enabled(self) -> bool:
+        return self._enabled
+
+    async def connect(self) -> None:
+        if self._endpoint:
+            try:
+                import httpx
+                self._client = httpx.AsyncClient(
+                    base_url=self._endpoint,
+                    timeout=10.0,
+                )
+                self._enabled = True
+                logger.info(f"Connected to SkillForge at {self._endpoint}")
+            except Exception as e:
+                logger.warning(f"Failed to connect to SkillForge: {e}")
+
+        if self._local:
+            try:
+                import skillforge
+                self._skillforge_available = True
+                self._enabled = True
+                logger.info("Local SkillForge available")
+            except ImportError:
+                logger.info("SkillForge not installed locally (pip install skillforge for integration)")
+
+    async def close(self) -> None:
+        if self._client:
+            await self._client.aclose()
+            self._client = None
+        self._enabled = False
+
+    async def list_skills(self) -> list[dict[str, Any]]:
+        if not self._enabled:
+            return []
+
+        if self._client:
+            try:
+                resp = await self._client.get("/api/v1/skills")
+                return resp.json().get("skills", [])
+            except Exception as e:
+                logger.warning(f"SkillForge list request failed: {e}")
+
+        if self._skillforge_available:
+            try:
+                from skillforge import SkillRegistry
+                registry = SkillRegistry()
+                return [
+                    {"name": skill.name, "description": skill.description, "version": skill.version}
+                    for skill in registry.list()
+                ]
+            except Exception as e:
+                logger.warning(f"Local SkillForge list failed: {e}")
+
+        return []
+
+    async def execute_skill(self, skill_name: str, params: dict[str, Any]) -> dict[str, Any]:
+        if not self._enabled:
+            raise PluginError("SkillForge not connected")
+
+        if self._client:
+            try:
+                resp = await self._client.post(
+                    f"/api/v1/skills/{skill_name}/execute",
+                    json={"params": params},
+                )
+                return resp.json()
+            except Exception as e:
+                raise PluginError(f"SkillForge execute request failed: {e}") from e
+
+        if self._skillforge_available:
+            try:
+                from skillforge import SkillContext, SkillRegistry
+                registry = SkillRegistry()
+                skill = registry.get(skill_name)
+                if skill is None:
+                    raise PluginError(f"Skill '{skill_name}' not found in local SkillForge")
+                context = SkillContext(params=params)
+                result = skill.execute(context)
+                return {
+                    "success": True,
+                    "result": result,
+                    "skill": skill_name,
+                }
+            except PluginError:
+                raise
+            except Exception as e:
+                raise PluginError(f"Local SkillForge execution failed: {e}") from e
+
+        raise PluginError("SkillForge not available")
+
+    async def get_skill(self, skill_name: str) -> dict[str, Any] | None:
+        if self._client:
+            try:
+                resp = await self._client.get(f"/api/v1/skills/{skill_name}")
+                return resp.json()
+            except Exception:
+                pass
+
+        if self._skillforge_available:
+            try:
+                from skillforge import SkillRegistry
+                registry = SkillRegistry()
+                skill = registry.get(skill_name)
+                if skill:
+                    return {"name": skill.name, "description": skill.description, "version": skill.version}
+            except Exception:
+                pass
+
+        return None

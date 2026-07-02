@@ -1,0 +1,18 @@
+policies:
+  - name: permissive
+    description: Permissive policy for development/testing
+    version: "1.0"
+    enabled: true
+    default_decision: allow
+
+    rules:
+      - action_type: evaluate
+        risk_threshold: critical
+        decision: require_confirmation
+        priority: 50
+        reasons:
+          - JavaScript execution requires confirmation in permissive mode
+
+    rate_limit:
+      max_actions_per_minute: 60
+      max_actions_per_session: 500

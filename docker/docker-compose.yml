@@ -1,0 +1,40 @@
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: computeforge-api
+    ports:
+      - "8000:8000"
+    environment:
+      - COMPUTEFORGE_BROWSER__HEADLESS=true
+      - COMPUTEFORGE_LOG_LEVEL=INFO
+    volumes:
+      - computeforge-api-data:/data/computeforge
+    command: uvicorn computeforge.api.server:app --host 0.0.0.0 --port 8000
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  dashboard:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: computeforge-dashboard
+    ports:
+      - "7860:7860"
+    environment:
+      - COMPUTEFORGE_BROWSER__HEADLESS=true
+      - COMPUTEFORGE_LOG_LEVEL=INFO
+      - COMPUTEFORGE_API_URL=http://api:8000
+    volumes:
+      - computeforge-dashboard-data:/data/computeforge
+    command: python -c "from computeforge.dashboard.app import launch_dashboard; launch_dashboard(host='0.0.0.0', port=7860)"
+    restart: unless-stopped
+
+volumes:
+  computeforge-api-data:
+  computeforge-dashboard-data:

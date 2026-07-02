@@ -1,0 +1,77 @@
+> from __future__ import annotations
+  
+> import enum
+> import uuid
+> from datetime import datetime
+> from typing import Any
+  
+> from pydantic import BaseModel, Field
+  
+  
+> class SessionStatus(str, enum.Enum):
+>     PENDING = "pending"
+>     RUNNING = "running"
+>     PAUSED = "paused"
+>     COMPLETED = "completed"
+>     FAILED = "failed"
+>     CANCELLED = "cancelled"
+  
+  
+> class SessionConfig(BaseModel):
+>     """Configuration for a session."""
+>     headless: bool = True
+>     viewport_width: int = 1280
+>     viewport_height: int = 720
+>     base_url: str | None = None
+>     max_actions: int = 0  # 0 = unlimited
+>     timeout_seconds: int = 300
+>     record_screenshots: bool = True
+>     safety_enabled: bool = True
+>     metadata: dict[str, Any] = Field(default_factory=dict)
+  
+  
+> class Session(BaseModel):
+>     """A complete computer-use session."""
+>     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+>     status: SessionStatus = SessionStatus.PENDING
+>     config: SessionConfig = Field(default_factory=SessionConfig)
+>     created_at: datetime = Field(default_factory=datetime.utcnow)
+>     updated_at: datetime = Field(default_factory=datetime.utcnow)
+>     started_at: datetime | None = None
+>     ended_at: datetime | None = None
+>     action_count: int = 0
+>     error: str | None = None
+>     metadata: dict[str, Any] = Field(default_factory=dict)
+>     tags: list[str] = Field(default_factory=list)
+  
+>     def start(self) -> None:
+>         self.status = SessionStatus.RUNNING
+>         self.started_at = datetime.utcnow()
+>         self.updated_at = datetime.utcnow()
+  
+>     def complete(self) -> None:
+>         self.status = SessionStatus.COMPLETED
+>         self.ended_at = datetime.utcnow()
+>         self.updated_at = datetime.utcnow()
+  
+>     def fail(self, error: str) -> None:
+>         self.status = SessionStatus.FAILED
+>         self.error = error
+>         self.ended_at = datetime.utcnow()
+>         self.updated_at = datetime.utcnow()
+  
+>     def pause(self) -> None:
+>         self.status = SessionStatus.PAUSED
+>         self.updated_at = datetime.utcnow()
+  
+>     def resume(self) -> None:
+>         self.status = SessionStatus.RUNNING
+>         self.updated_at = datetime.utcnow()
+  
+>     def increment_actions(self) -> None:
+>         self.action_count += 1
+>         self.updated_at = datetime.utcnow()
+  
+>     def model_dump(self, **kwargs) -> dict[str, Any]:
+!         kwargs.setdefault("mode", "json")
+!         return super().model_dump(**kwargs)

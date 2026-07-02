@@ -1,0 +1,157 @@
+! from __future__ import annotations
+  
+! import asyncio
+! from typing import Any
+  
+! import gradio as gr
+  
+! from computeforge.core.actions import ActionType
+  
+  
+! def create_intervention_tab() -> None:
+!     """Create the manual intervention / control tab."""
+!     _engine_state: dict[str, Any] = {
+!         "engine": None,
+!         "running": False,
+!     }
+  
+!     def get_action_types() -> list[str]:
+!         return [t.value for t in ActionType]
+  
+!     def update_status() -> str:
+!         if _engine_state["engine"] and _engine_state["running"]:
+!             return "🟢 **Engine is running**"
+!         return "🔴 **Engine is stopped**"
+  
+!     def start_engine(url: str, headless: bool) -> str:
+!         try:
+!             from computeforge.core.engine import ComputeEngine
+!             from computeforge.models.config import EngineConfig
+!             from computeforge.models.session import SessionConfig
+  
+!             config = EngineConfig()
+!             config.browser.headless = headless
+  
+!             async def _start():
+!                 engine = ComputeEngine(config=config)
+!                 await engine.create_session(SessionConfig(headless=headless))
+!                 await engine.start_session()
+!                 if url:
+!                     result = await engine.navigate(url)
+!                     if not result.success:
+!                         return f"Navigation failed: {result.error}"
+!                 _engine_state["engine"] = engine
+!                 _engine_state["running"] = True
+!                 return f"Engine started. Session: {engine.session.id[:8]}..."
+  
+!             loop = asyncio.new_event_loop()
+!             result = loop.run_until_complete(_start())
+!             loop.close()
+!             return result
+!         except Exception as e:
+!             return f"Error: {e}"
+  
+!     def stop_engine() -> str:
+!         try:
+!             if _engine_state["engine"]:
+!                 async def _stop():
+!                     await _engine_state["engine"].stop_session()
+!                     _engine_state["engine"] = None
+!                     _engine_state["running"] = False
+  
+!                 loop = asyncio.new_event_loop()
+!                 loop.run_until_complete(_stop())
+!                 loop.close()
+!                 return "Engine stopped."
+!             return "No engine running."
+!         except Exception as e:
+!             return f"Error: {e}"
+  
+!     def execute_custom_action(action_type: str, params_str: str) -> str:
+!         try:
+!             if not _engine_state["engine"] or not _engine_state["running"]:
+!                 return "No engine running. Start the engine first."
+  
+!             import json
+!             params = json.loads(params_str) if params_str.strip() else {}
+!             atype = ActionType(action_type)
+  
+!             async def _execute():
+!                 result = await _engine_state["engine"].execute(atype, **params)
+!                 return f"**Result:** success={result.success}\n**Data:** {result.data}\n**Error:** {result.error}\n**Duration:** {result.duration_ms:.0f}ms"
+  
+!             loop = asyncio.new_event_loop()
+!             result = loop.run_until_complete(_execute())
+!             loop.close()
+!             return result
+!         except Exception as e:
+!             return f"Error: {e}"
+  
+!     def pause_engine() -> str:
+!         try:
+!             if _engine_state["engine"]:
+!                 async def _pause():
+!                     await _engine_state["engine"].pause_session()
+  
+!                 loop = asyncio.new_event_loop()
+!                 loop.run_until_complete(_pause())
+!                 loop.close()
+!                 return "Engine paused."
+!             return "No engine running."
+!         except Exception as e:
+!             return f"Error: {e}"
+  
+!     def resume_engine() -> str:
+!         try:
+!             if _engine_state["engine"]:
+!                 async def _resume():
+!                     await _engine_state["engine"].resume_session()
+  
+!                 loop = asyncio.new_event_loop()
+!                 loop.run_until_complete(_resume())
+!                 loop.close()
+!                 return "Engine resumed."
+!             return "No engine running."
+!         except Exception as e:
+!             return f"Error: {e}"
+  
+!     gr.Markdown("### 🛡️ Manual Intervention & Control")
+  
+!     with gr.Row():
+!         with gr.Column(scale=1):
+!             gr.Markdown("#### 🚀 Engine Control")
+!             start_url = gr.Textbox(
+!                 label="Start URL (optional)",
+!                 placeholder="https://example.com",
+!             )
+!             headless_mode = gr.Checkbox(label="Headless mode", value=True)
+!             with gr.Row():
+!                 start_btn = gr.Button("▶️ Start Engine", variant="primary")
+!                 stop_btn = gr.Button("⏹️ Stop Engine", variant="stop")
+!             with gr.Row():
+!                 pause_btn = gr.Button("⏸️ Pause", variant="secondary")
+!                 resume_btn = gr.Button("▶️ Resume", variant="secondary")
+  
+!             status_display = gr.Markdown("🔴 **Engine is stopped**")
+!             engine_output = gr.Markdown("")
+  
+!         with gr.Column(scale=1):
+!             gr.Markdown("#### ⚡ Execute Action")
+!             action_type_dropdown = gr.Dropdown(
+!                 choices=get_action_types(),
+!                 label="Action Type",
+!                 value="navigate",
+!             )
+!             action_params = gr.Textbox(
+!                 label="Parameters (JSON)",
+!                 placeholder='{"url": "https://example.com"}',
+!                 lines=3,
+!             )
+!             execute_btn = gr.Button("⚡ Execute", variant="primary")
+!             action_result = gr.Markdown("")
+  
+!     start_btn.click(fn=start_engine, inputs=[start_url, headless_mode], outputs=[engine_output])
+!     stop_btn.click(fn=stop_engine, inputs=[], outputs=[engine_output])
+!     pause_btn.click(fn=pause_engine, inputs=[], outputs=[engine_output])
+!     resume_btn.click(fn=resume_engine, inputs=[], outputs=[engine_output])
+!     execute_btn.click(fn=execute_custom_action, inputs=[action_type_dropdown, action_params], outputs=[action_result])

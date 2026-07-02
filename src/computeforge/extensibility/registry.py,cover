@@ -1,0 +1,115 @@
+! from __future__ import annotations
+  
+! import logging
+! from typing import Any
+  
+! from computeforge.core.actions import ActionRequest, ActionResult
+! from computeforge.extensibility.plugin import PluginBase, PluginLoader, PluginMeta
+  
+! logger = logging.getLogger("computeforge.extensibility.registry")
+  
+  
+! class PluginRegistry:
+!     """Singleton-style registry that manages all loaded plugins."""
+  
+!     _instance: PluginRegistry | None = None
+  
+!     def __new__(cls) -> PluginRegistry:
+!         if cls._instance is None:
+!             cls._instance = super().__new__(cls)
+!             cls._instance._initialized = False
+!         return cls._instance
+  
+!     def __init__(self):
+!         if self._initialized:
+!             return
+!         self._plugins: dict[str, PluginBase] = {}
+!         self._plugin_meta: dict[str, PluginMeta] = {}
+!         self._loader = PluginLoader()
+!         self._initialized = True
+  
+!     @property
+!     def plugins(self) -> dict[str, PluginBase]:
+!         return dict(self._plugins)
+  
+!     def add_plugin_dir(self, path: str) -> None:
+!         self._loader.add_plugin_dir(path)
+  
+!     def discover_and_load(self) -> list[PluginMeta]:
+!         """Discover and load plugins, returns list of loaded plugin metadata."""
+!         instances = self._loader.load_plugins()
+!         metas = []
+!         for plugin in instances:
+!             meta = plugin.get_meta()
+!             self._plugins[meta.name] = plugin
+!             self._plugin_meta[meta.name] = meta
+!             metas.append(meta)
+!             logger.info(f"Registered plugin: {meta.name} v{meta.version}")
+!         return metas
+  
+!     def register(self, plugin: PluginBase) -> None:
+!         meta = plugin.get_meta()
+!         self._plugins[meta.name] = plugin
+!         self._plugin_meta[meta.name] = meta
+!         logger.info(f"Registered plugin directly: {meta.name}")
+  
+!     def unregister(self, name: str) -> None:
+!         if name in self._plugins:
+!             plugin = self._plugins.pop(name)
+!             self._plugin_meta.pop(name, None)
+!             logger.info(f"Unregistered plugin: {name}")
+  
+!     def get(self, name: str) -> PluginBase | None:
+!         return self._plugins.get(name)
+  
+!     def get_meta(self, name: str) -> PluginMeta | None:
+!         return self._plugin_meta.get(name)
+  
+!     def list_plugins(self) -> list[PluginMeta]:
+!         return list(self._plugin_meta.values())
+  
+!     async def dispatch_action_before(self, request: ActionRequest) -> ActionRequest:
+!         for name, plugin in self._plugins.items():
+!             try:
+!                 result = await plugin.on_action_before(request)
+!                 if result is not None:
+!                     request = result
+!             except Exception as e:
+!                 logger.warning(f"Plugin {name} on_action_before error: {e}")
+!         return request
+  
+!     async def dispatch_action_after(self, request: ActionRequest, result: ActionResult) -> None:
+!         for name, plugin in self._plugins.items():
+!             try:
+!                 await plugin.on_action_after(request, result)
+!             except Exception as e:
+!                 logger.warning(f"Plugin {name} on_action_after error: {e}")
+  
+!     async def dispatch_session_start(self, session_id: str, config: dict[str, Any]) -> None:
+!         for name, plugin in self._plugins.items():
+!             try:
+!                 await plugin.on_session_start(session_id, config)
+!             except Exception as e:
+!                 logger.warning(f"Plugin {name} on_session_start error: {e}")
+  
+!     async def dispatch_session_end(self, session_id: str, status: str) -> None:
+!         for name, plugin in self._plugins.items():
+!             try:
+!                 await plugin.on_session_end(session_id, status)
+!             except Exception as e:
+!                 logger.warning(f"Plugin {name} on_session_end error: {e}")
+  
+!     async def dispatch_error(self, error: Exception, context: dict[str, Any]) -> None:
+!         for name, plugin in self._plugins.items():
+!             try:
+!                 await plugin.on_error(error, context)
+!             except Exception as e:
+!                 logger.warning(f"Plugin {name} on_error error: {e}")
+  
+!     async def load_all(self) -> None:
+!         self.discover_and_load()
+!         for name, plugin in self._plugins.items():
+!             try:
+!                 await plugin.on_load()
+!             except Exception as e:
+!                 logger.warning(f"Plugin {name} on_load error: {e}")

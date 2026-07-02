@@ -1,0 +1,57 @@
+> from __future__ import annotations
+  
+> import enum
+> import uuid
+> from datetime import datetime
+> from typing import Any
+  
+> from pydantic import BaseModel, Field
+  
+  
+> class ActionStatus(str, enum.Enum):
+>     PENDING = "pending"
+>     RUNNING = "running"
+>     SUCCEEDED = "succeeded"
+>     FAILED = "failed"
+>     BLOCKED = "blocked"
+>     CANCELLED = "cancelled"
+  
+  
+> class ActionRecord(BaseModel):
+>     """Record of a single action within a session."""
+>     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+>     session_id: str = ""
+>     type: str = ""
+>     params: dict[str, Any] = Field(default_factory=dict)
+>     status: ActionStatus = ActionStatus.PENDING
+>     result: Any = None
+>     error: str | None = None
+>     risk_score: float | None = None
+>     safety_decision: str | None = None
+>     screenshot_before: str | None = None
+>     screenshot_after: str | None = None
+>     created_at: datetime = Field(default_factory=datetime.utcnow)
+>     completed_at: datetime | None = None
+>     duration_ms: float = 0.0
+>     metadata: dict[str, Any] = Field(default_factory=dict)
+  
+>     def mark_succeeded(self, result: Any, duration_ms: float) -> None:
+!         self.status = ActionStatus.SUCCEEDED
+!         self.result = result
+!         self.duration_ms = duration_ms
+!         self.completed_at = datetime.utcnow()
+  
+>     def mark_failed(self, error: str, duration_ms: float) -> None:
+!         self.status = ActionStatus.FAILED
+!         self.error = error
+!         self.duration_ms = duration_ms
+!         self.completed_at = datetime.utcnow()
+  
+>     def mark_blocked(self, reason: str) -> None:
+!         self.status = ActionStatus.BLOCKED
+!         self.error = reason
+!         self.completed_at = datetime.utcnow()
+  
+>     def model_dump(self, **kwargs) -> dict[str, Any]:
+!         kwargs.setdefault("mode", "json")
+!         return super().model_dump(**kwargs)

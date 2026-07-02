@@ -1,0 +1,77 @@
+from __future__ import annotations
+
+from typing import Any
+
+from computeforge.providers.base import (
+    LLMProvider,
+    Message,
+    ProviderCapability,
+    ProviderConfig,
+    ProviderResponse,
+)
+
+
+class GeminiProvider(LLMProvider):
+    """Provider for Google Gemini free-tier API."""
+
+    def __init__(self, config: ProviderConfig | None = None):
+        if config is None:
+            config = ProviderConfig(model="gemini-2.0-flash")
+        super().__init__(config)
+
+    def get_provider_name(self) -> str:
+        return "gemini"
+
+    def get_capabilities(self) -> list[ProviderCapability]:
+        return [ProviderCapability.CHAT, ProviderCapability.VISION]
+
+    async def initialize(self) -> None:
+        if not self._initialized:
+            try:
+                import google.genai as genai
+                self._client = genai.aio.Client(
+                    api_key=self.config.api_key,
+                )
+                self._model = self._client.aio.models.get(self.config.model)
+                self._initialized = True
+            except ImportError:
+                raise ImportError("google-genai package required. Install with: pip install google-genai")
+
+    async def chat(self, messages: list[Message]) -> ProviderResponse:
+        await self.initialize()
+
+        contents = []
+        for msg in messages:
+            parts: list[dict[str, Any]] = [{"text": msg.content}]
+            if msg.images:
+                import base64
+                for img in msg.images:
+                    parts.append({
+                        "inline_data": {
+                            "mime_type": "image/png",
+                            "data": base64.b64encode(img).decode("utf-8"),
+                        },
+                    })
+            contents.append({"role": msg.role, "parts": parts})
+
+        generation_config = {
+            "temperature": self.config.temperature,
+            "max_output_tokens": self.config.max_tokens,
+        }
+
+        response = await self._client.models.generate_content(
+            model=self.config.model,
+            contents=contents,
+            config=generation_config,
+        )
+
+        return ProviderResponse(
+            content=response.text or "",
+            finish_reason=response.candidates[0].finish_reason.name if response.candidates else "stop",
+            usage={
+                "prompt_tokens": response.usage_metadata.prompt_token_count if response.usage_metadata else 0,
+                "completion_tokens": response.usage_metadata.candidates_token_count if response.usage_metadata else 0,
+            },
+            model=self.config.model,
+            raw=response.to_dict() if hasattr(response, "to_dict") else None,
+        )

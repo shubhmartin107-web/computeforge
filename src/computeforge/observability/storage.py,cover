@@ -1,0 +1,582 @@
+> from __future__ import annotations
+  
+> import json
+> import sqlite3
+> from collections.abc import AsyncGenerator
+> from datetime import datetime, timedelta
+> from pathlib import Path
+> from typing import Any
+  
+> import aiosqlite
+  
+> from computeforge.core.exceptions import SessionNotFound
+> from computeforge.models.action import ActionRecord, ActionStatus
+> from computeforge.models.session import Session, SessionStatus
+  
+  
+> class StorageBackend:
+>     """Advanced persistent storage using SQLite + file system.
+  
+>     Features:
+>     - Full session and action CRUD
+>     - Paginated listing with filters
+>     - Screenshot storage with directory management
+>     - Session statistics and analytics
+>     - Action search by type, status, date range
+>     - Auto-cleanup of old sessions
+>     - Export to multiple formats
+>     - Connection pooling and retry
+>     """
+  
+>     def __init__(
+>         self,
+>         db_path: str | Path | None = None,
+>         screenshot_dir: str | Path | None = None,
+>         max_screenshots_per_session: int = 500,
+>         auto_cleanup_days: int = 30,
+>     ):
+!         self._db_path = Path(db_path or Path.home() / ".computeforge" / "sessions.db")
+!         self._screenshot_dir = Path(screenshot_dir or Path.home() / ".computeforge" / "screenshots")
+!         self._max_screenshots_per_session = max_screenshots_per_session
+!         self._auto_cleanup_days = auto_cleanup_days
+!         self._db_path.parent.mkdir(parents=True, exist_ok=True)
+!         self._screenshot_dir.mkdir(parents=True, exist_ok=True)
+!         self._conn: aiosqlite.Connection | None = None
+!         self._connected = False
+  
+>     @property
+>     def db_path(self) -> Path:
+!         return self._db_path
+  
+>     @property
+>     def connected(self) -> bool:
+!         return self._connected
+  
+      # ─── Connection Management ───────────────────────────────────────
+  
+>     async def connect(self) -> None:
+!         if self._connected:
+!             return
+!         try:
+!             self._conn = await aiosqlite.connect(str(self._db_path))
+!             self._conn.row_factory = aiosqlite.Row
+!             await self._conn.execute("PRAGMA journal_mode=WAL")
+!             await self._conn.execute("PRAGMA foreign_keys=ON")
+!             await self._conn.execute("PRAGMA busy_timeout=5000")
+!             await self._init_tables()
+!             self._connected = True
+!         except Exception as e:
+!             raise ConnectionError(f"Failed to connect to database: {e}") from e
+  
+>     async def close(self) -> None:
+!         if self._conn:
+!             await self._conn.close()
+!             self._conn = None
+!             self._connected = False
+  
+>     async def reconnect(self) -> None:
+!         await self.close()
+!         await self.connect()
+  
+      # ─── Schema ──────────────────────────────────────────────────────
+  
+>     async def _init_tables(self) -> None:
+!         await self._conn.executescript("""
+!             CREATE TABLE IF NOT EXISTS sessions (
+!                 id TEXT PRIMARY KEY,
+!                 status TEXT NOT NULL DEFAULT 'pending',
+!                 config TEXT NOT NULL DEFAULT '{}',
+!                 created_at TEXT NOT NULL,
+!                 updated_at TEXT NOT NULL,
+!                 started_at TEXT,
+!                 ended_at TEXT,
+!                 action_count INTEGER NOT NULL DEFAULT 0,
+!                 error TEXT,
+!                 metadata TEXT NOT NULL DEFAULT '{}',
+!                 tags TEXT NOT NULL DEFAULT '[]'
+!             );
+  
+!             CREATE TABLE IF NOT EXISTS actions (
+!                 id TEXT PRIMARY KEY,
+!                 session_id TEXT NOT NULL,
+!                 type TEXT NOT NULL,
+!                 params TEXT NOT NULL DEFAULT '{}',
+!                 status TEXT NOT NULL DEFAULT 'pending',
+!                 result TEXT,
+!                 error TEXT,
+!                 risk_score REAL,
+!                 safety_decision TEXT,
+!                 screenshot_before TEXT,
+!                 screenshot_after TEXT,
+!                 created_at TEXT NOT NULL,
+!                 completed_at TEXT,
+!                 duration_ms REAL NOT NULL DEFAULT 0.0,
+!                 metadata TEXT NOT NULL DEFAULT '{}',
+!                 FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+!             );
+  
+!             CREATE TABLE IF NOT EXISTS events (
+!                 id TEXT PRIMARY KEY,
+!                 session_id TEXT NOT NULL,
+!                 type TEXT NOT NULL,
+!                 data TEXT NOT NULL DEFAULT '{}',
+!                 created_at TEXT NOT NULL,
+!                 FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+!             );
+  
+!             CREATE TABLE IF NOT EXISTS annotations (
+!                 id TEXT PRIMARY KEY,
+!                 session_id TEXT NOT NULL,
+!                 action_id TEXT,
+!                 type TEXT NOT NULL DEFAULT 'note',
+!                 content TEXT NOT NULL,
+!                 created_at TEXT NOT NULL,
+!                 metadata TEXT NOT NULL DEFAULT '{}',
+!                 FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+!             );
+  
+!             CREATE INDEX IF NOT EXISTS idx_actions_session_id ON actions(session_id);
+!             CREATE INDEX IF NOT EXISTS idx_actions_status ON actions(status);
+!             CREATE INDEX IF NOT EXISTS idx_actions_type ON actions(type);
+!             CREATE INDEX IF NOT EXISTS idx_actions_created ON actions(created_at);
+!             CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status);
+!             CREATE INDEX IF NOT EXISTS idx_sessions_created ON sessions(created_at);
+!             CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id);
+!             CREATE INDEX IF NOT EXISTS idx_annotations_session ON annotations(session_id);
+!         """)
+  
+          # Migrate existing tables if needed
+!         try:
+!             await self._conn.execute("ALTER TABLE sessions ADD COLUMN provider TEXT DEFAULT ''")
+!         except Exception:
+!             pass
+!         try:
+!             await self._conn.execute("ALTER TABLE sessions ADD COLUMN model TEXT DEFAULT ''")
+!         except Exception:
+!             pass
+!         try:
+!             await self._conn.execute("ALTER TABLE sessions ADD COLUMN task TEXT DEFAULT ''")
+!         except Exception:
+!             pass
+  
+!         await self._conn.commit()
+  
+      # ─── Session Operations ──────────────────────────────────────────
+  
+>     async def save_session(self, session: Session) -> None:
+!         await self._conn.execute(
+!             """INSERT OR REPLACE INTO sessions
+!                (id, status, config, created_at, updated_at, started_at, ended_at,
+!                 action_count, error, metadata, tags, provider, model, task)
+!                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+!             (
+!                 session.id,
+!                 session.status.value,
+!                 session.config.model_dump_json(),
+!                 session.created_at.isoformat(),
+!                 session.updated_at.isoformat(),
+!                 session.started_at.isoformat() if session.started_at else None,
+!                 session.ended_at.isoformat() if session.ended_at else None,
+!                 session.action_count,
+!                 session.error,
+!                 json.dumps(session.metadata),
+!                 json.dumps(session.tags),
+!                 session.metadata.get("provider", ""),
+!                 session.metadata.get("model", ""),
+!                 session.metadata.get("task", ""),
+!             ),
+!         )
+!         await self._conn.commit()
+  
+>     async def load_session(self, session_id: str) -> Session:
+!         cursor = await self._conn.execute(
+!             "SELECT * FROM sessions WHERE id = ?", (session_id,)
+!         )
+!         row = await cursor.fetchone()
+!         if row is None:
+!             raise SessionNotFound(f"Session {session_id} not found")
+!         return self._row_to_session(row)
+  
+>     async def list_sessions(
+>         self,
+>         limit: int = 50,
+>         offset: int = 0,
+>         status: str | None = None,
+>         search: str | None = None,
+>         sort_by: str = "created_at",
+>         sort_desc: bool = True,
+>         date_from: str | None = None,
+>         date_to: str | None = None,
+>     ) -> list[Session]:
+!         query = "SELECT * FROM sessions WHERE 1=1"
+!         params: list[Any] = []
+  
+!         if status:
+!             query += " AND status = ?"
+!             params.append(status)
+  
+!         if search:
+!             query += " AND (id LIKE ? OR error LIKE ? OR metadata LIKE ?)"
+!             search_term = f"%{search}%"
+!             params.extend([search_term, search_term, search_term])
+  
+!         if date_from:
+!             query += " AND created_at >= ?"
+!             params.append(date_from)
+  
+!         if date_to:
+!             query += " AND created_at <= ?"
+!             params.append(date_to)
+  
+!         order = "DESC" if sort_desc else "ASC"
+!         query += f" ORDER BY {sort_by} {order} LIMIT ? OFFSET ?"
+!         params.extend([limit, offset])
+  
+!         cursor = await self._conn.execute(query, params)
+!         rows = await cursor.fetchall()
+!         return [self._row_to_session(r) for r in rows]
+  
+>     async def count_sessions(
+>         self,
+>         status: str | None = None,
+>         search: str | None = None,
+>     ) -> int:
+!         query = "SELECT COUNT(*) as count FROM sessions WHERE 1=1"
+!         params: list[Any] = []
+!         if status:
+!             query += " AND status = ?"
+!             params.append(status)
+!         if search:
+!             query += " AND (id LIKE ? OR error LIKE ?)"
+!             st = f"%{search}%"
+!             params.extend([st, st])
+!         cursor = await self._conn.execute(query, params)
+!         row = await cursor.fetchone()
+!         return row[0] if row else 0
+  
+>     async def update_session_status(self, session_id: str, status: SessionStatus, error: str | None = None) -> None:
+!         now = datetime.utcnow().isoformat()
+!         if status in (SessionStatus.COMPLETED, SessionStatus.FAILED, SessionStatus.CANCELLED):
+!             await self._conn.execute(
+!                 "UPDATE sessions SET status = ?, ended_at = ?, updated_at = ?, error = ? WHERE id = ?",
+!                 (status.value, now, now, error, session_id),
+!             )
+!         else:
+!             await self._conn.execute(
+!                 "UPDATE sessions SET status = ?, updated_at = ? WHERE id = ?",
+!                 (status.value, now, session_id),
+!             )
+!         await self._conn.commit()
+  
+>     async def delete_session(self, session_id: str) -> None:
+!         await self._conn.execute("DELETE FROM annotations WHERE session_id = ?", (session_id,))
+!         await self._conn.execute("DELETE FROM events WHERE session_id = ?", (session_id,))
+!         await self._conn.execute("DELETE FROM actions WHERE session_id = ?", (session_id,))
+!         await self._conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+!         await self._conn.commit()
+!         self._cleanup_screenshots(session_id)
+  
+>     async def get_sessions_by_tag(self, tag: str) -> list[Session]:
+!         cursor = await self._conn.execute(
+!             "SELECT * FROM sessions WHERE tags LIKE ? ORDER BY created_at DESC",
+!             (f"%{tag}%",),
+!         )
+!         rows = await cursor.fetchall()
+!         return [self._row_to_session(r) for r in rows]
+  
+      # ─── Action Operations ───────────────────────────────────────────
+  
+>     async def save_action(self, action: ActionRecord) -> None:
+!         await self._conn.execute(
+!             """INSERT OR REPLACE INTO actions
+!                (id, session_id, type, params, status, result, error,
+!                 risk_score, safety_decision, screenshot_before, screenshot_after,
+!                 created_at, completed_at, duration_ms, metadata)
+!                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+!             (
+!                 action.id,
+!                 action.session_id,
+!                 action.type,
+!                 json.dumps(action.params),
+!                 action.status.value,
+!                 json.dumps(action.result) if action.result is not None else None,
+!                 action.error,
+!                 action.risk_score,
+!                 action.safety_decision,
+!                 action.screenshot_before,
+!                 action.screenshot_after,
+!                 action.created_at.isoformat(),
+!                 action.completed_at.isoformat() if action.completed_at else None,
+!                 action.duration_ms,
+!                 json.dumps(action.metadata),
+!             ),
+!         )
+!         await self._conn.commit()
+  
+>     async def load_actions(
+>         self,
+>         session_id: str,
+>         limit: int = 200,
+>         offset: int = 0,
+>         status: str | None = None,
+>         action_type: str | None = None,
+>     ) -> list[ActionRecord]:
+!         query = "SELECT * FROM actions WHERE session_id = ?"
+!         params: list[Any] = [session_id]
+!         if status:
+!             query += " AND status = ?"
+!             params.append(status)
+!         if action_type:
+!             query += " AND type = ?"
+!             params.append(action_type)
+!         query += " ORDER BY created_at ASC LIMIT ? OFFSET ?"
+!         params.extend([limit, offset])
+!         cursor = await self._conn.execute(query, params)
+!         rows = await cursor.fetchall()
+!         return [self._row_to_action(r) for r in rows]
+  
+>     async def load_action(self, action_id: str) -> ActionRecord | None:
+!         cursor = await self._conn.execute(
+!             "SELECT * FROM actions WHERE id = ?", (action_id,)
+!         )
+!         row = await cursor.fetchone()
+!         return self._row_to_action(row) if row else None
+  
+>     async def get_action_count(self, session_id: str) -> int:
+!         cursor = await self._conn.execute(
+!             "SELECT COUNT(*) as count FROM actions WHERE session_id = ?", (session_id,)
+!         )
+!         row = await cursor.fetchone()
+!         return row[0] if row else 0
+  
+>     async def stream_actions(self, session_id: str) -> AsyncGenerator[ActionRecord, None]:
+!         offset = 0
+!         while True:
+!             actions = await self.load_actions(session_id, limit=50, offset=offset)
+!             if not actions:
+!                 break
+!             for action in actions:
+!                 yield action
+!             offset += 50
+  
+>     async def search_actions(
+>         self,
+>         query_str: str,
+>         limit: int = 50,
+>         offset: int = 0,
+>     ) -> list[ActionRecord]:
+!         search = f"%{query_str}%"
+!         cursor = await self._conn.execute(
+!             """SELECT * FROM actions
+!                WHERE type LIKE ? OR error LIKE ? OR params LIKE ?
+!                ORDER BY created_at DESC LIMIT ? OFFSET ?""",
+!             (search, search, search, limit, offset),
+!         )
+!         rows = await cursor.fetchall()
+!         return [self._row_to_action(r) for r in rows]
+  
+>     async def get_action_timeline(self, session_id: str) -> list[dict[str, Any]]:
+!         cursor = await self._conn.execute(
+!             """SELECT type, status, duration_ms, created_at, error
+!                FROM actions WHERE session_id = ?
+!                ORDER BY created_at ASC""",
+!             (session_id,),
+!         )
+!         rows = await cursor.fetchall()
+!         return [
+!             {
+!                 "type": r["type"],
+!                 "status": r["status"],
+!                 "duration_ms": r["duration_ms"],
+!                 "created_at": r["created_at"],
+!                 "error": r["error"],
+!             }
+!             for r in rows
+!         ]
+  
+      # ─── Event Operations ─────────────────────────────────────────────
+  
+>     async def save_event(self, session_id: str, event_type: str, data: dict[str, Any]) -> None:
+!         import uuid
+!         await self._conn.execute(
+!             "INSERT INTO events (id, session_id, type, data, created_at) VALUES (?, ?, ?, ?, ?)",
+!             (str(uuid.uuid4()), session_id, event_type, json.dumps(data), datetime.utcnow().isoformat()),
+!         )
+!         await self._conn.commit()
+  
+>     async def get_events(self, session_id: str, limit: int = 100) -> list[dict[str, Any]]:
+!         cursor = await self._conn.execute(
+!             "SELECT * FROM events WHERE session_id = ? ORDER BY created_at ASC LIMIT ?",
+!             (session_id, limit),
+!         )
+!         rows = await cursor.fetchall()
+!         return [dict(r) for r in rows]
+  
+      # ─── Annotation Operations ─────────────────────────────────────────
+  
+>     async def add_annotation(self, session_id: str, content: str, action_id: str | None = None, atype: str = "note") -> str:
+!         import uuid
+!         aid = str(uuid.uuid4())
+!         await self._conn.execute(
+!             "INSERT INTO annotations (id, session_id, action_id, type, content, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+!             (aid, session_id, action_id, atype, content, datetime.utcnow().isoformat()),
+!         )
+!         await self._conn.commit()
+!         return aid
+  
+>     async def get_annotations(self, session_id: str) -> list[dict[str, Any]]:
+!         cursor = await self._conn.execute(
+!             "SELECT * FROM annotations WHERE session_id = ? ORDER BY created_at ASC", (session_id,)
+!         )
+!         rows = await cursor.fetchall()
+!         return [dict(r) for r in rows]
+  
+      # ─── Screenshot Operations ─────────────────────────────────────────
+  
+>     def save_screenshot(self, session_id: str, action_id: str, image_bytes: bytes, label: str = "") -> str:
+!         session_dir = self._screenshot_dir / session_id
+!         session_dir.mkdir(parents=True, exist_ok=True)
+!         filename = f"{action_id}_{label}.png" if label else f"{action_id}.png"
+!         filepath = session_dir / filename
+!         with open(filepath, "wb") as f:
+!             f.write(image_bytes)
+!         return str(filepath)
+  
+>     def load_screenshot(self, path: str) -> bytes | None:
+!         p = Path(path)
+!         if p.exists():
+!             return p.read_bytes()
+!         return None
+  
+>     def list_screenshots(self, session_id: str) -> list[Path]:
+!         session_dir = self._screenshot_dir / session_id
+!         if session_dir.exists():
+!             return sorted(session_dir.iterdir())
+!         return []
+  
+>     def _cleanup_screenshots(self, session_id: str) -> None:
+!         session_dir = self._screenshot_dir / session_id
+!         if session_dir.exists():
+!             import shutil
+!             shutil.rmtree(session_dir)
+  
+      # ─── Statistics ────────────────────────────────────────────────────
+  
+>     async def get_session_stats(self) -> dict[str, Any]:
+!         total = await self._conn.execute_fetchall("SELECT COUNT(*) FROM sessions")
+!         by_status = await self._conn.execute_fetchall(
+!             "SELECT status, COUNT(*) as count FROM sessions GROUP BY status"
+!         )
+!         total_actions = await self._conn.execute_fetchall("SELECT COUNT(*) FROM actions")
+!         succeeded = await self._conn.execute_fetchall(
+!             "SELECT COUNT(*) FROM actions WHERE status = 'succeeded'"
+!         )
+!         failed = await self._conn.execute_fetchall(
+!             "SELECT COUNT(*) FROM actions WHERE status = 'failed'"
+!         )
+!         avg_duration = await self._conn.execute_fetchall(
+!             "SELECT AVG(duration_ms) FROM actions WHERE status = 'succeeded'"
+!         )
+!         top_types = await self._conn.execute_fetchall(
+!             "SELECT type, COUNT(*) as count FROM actions GROUP BY type ORDER BY count DESC LIMIT 10"
+!         )
+  
+!         return {
+!             "total_sessions": total[0][0] if total else 0,
+!             "by_status": {r[0]: r[1] for r in by_status},
+!             "total_actions": total_actions[0][0] if total_actions else 0,
+!             "succeeded": succeeded[0][0] if succeeded else 0,
+!             "failed": failed[0][0] if failed else 0,
+!             "avg_duration_ms": round(avg_duration[0][0], 2) if avg_duration and avg_duration[0][0] else 0.0,
+!             "top_action_types": [(r[0], r[1]) for r in top_types],
+!         }
+  
+>     async def get_daily_stats(self, days: int = 7) -> list[dict[str, Any]]:
+!         from datetime import timedelta
+!         cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
+!         cursor = await self._conn.execute(
+!             """SELECT DATE(created_at) as day, COUNT(*) as sessions,
+!                SUM(action_count) as actions
+!                FROM sessions WHERE created_at >= ?
+!                GROUP BY DATE(created_at) ORDER BY day""",
+!             (cutoff,),
+!         )
+!         rows = await cursor.fetchall()
+!         return [{"date": r[0], "sessions": r[1], "actions": r[2] or 0} for r in rows]
+  
+>     async def auto_cleanup(self) -> int:
+!         cutoff = (datetime.utcnow() - timedelta(days=self._auto_cleanup_days)).isoformat()
+!         cursor = await self._conn.execute(
+!             "SELECT id FROM sessions WHERE created_at < ? AND status IN ('completed', 'failed', 'cancelled')",
+!             (cutoff,),
+!         )
+!         rows = await cursor.fetchall()
+!         count = 0
+!         for row in rows:
+!             await self.delete_session(row[0])
+!             count += 1
+!         return count
+  
+      # ─── Export ────────────────────────────────────────────────────────
+  
+>     async def export_session_json(self, session_id: str) -> str:
+!         session = await self.load_session(session_id)
+!         actions = await self.load_actions(session_id)
+!         data = {
+!             "version": "1.0",
+!             "exported_at": datetime.utcnow().isoformat(),
+!             "session": session.model_dump(),
+!             "actions": [a.model_dump() for a in actions],
+!             "total_actions": len(actions),
+!         }
+!         return json.dumps(data, indent=2, default=str)
+  
+>     async def import_session_json(self, json_str: str) -> str:
+!         data = json.loads(json_str)
+!         session_data = data.get("session", {})
+!         session = Session(**session_data)
+!         await self.save_session(session)
+!         for action_data in data.get("actions", []):
+!             action = ActionRecord(**action_data)
+!             await self.save_action(action)
+!         return session.id
+  
+      # ─── Row Mappers ────────────────────────────────────────────────────
+  
+>     def _row_to_session(self, row: sqlite3.Row) -> Session:
+!         d = dict(row)
+!         from computeforge.models.session import SessionConfig
+!         return Session(
+!             id=d["id"],
+!             status=SessionStatus(d["status"]),
+!             config=SessionConfig.model_validate_json(d["config"]),
+!             created_at=datetime.fromisoformat(d["created_at"]),
+!             updated_at=datetime.fromisoformat(d["updated_at"]),
+!             started_at=datetime.fromisoformat(d["started_at"]) if d.get("started_at") else None,
+!             ended_at=datetime.fromisoformat(d["ended_at"]) if d.get("ended_at") else None,
+!             action_count=d["action_count"],
+!             error=d.get("error"),
+!             metadata=json.loads(d["metadata"]) if isinstance(d.get("metadata"), str) else (d.get("metadata") or {}),
+!             tags=json.loads(d["tags"]) if isinstance(d.get("tags"), str) else (d.get("tags") or []),
+!         )
+  
+>     def _row_to_action(self, row: sqlite3.Row) -> ActionRecord:
+!         d = dict(row)
+!         result = json.loads(d["result"]) if isinstance(d.get("result"), str) and d["result"] else d.get("result")
+!         return ActionRecord(
+!             id=d["id"],
+!             session_id=d["session_id"],
+!             type=d["type"],
+!             params=json.loads(d["params"]) if isinstance(d.get("params"), str) else (d.get("params") or {}),
+!             status=ActionStatus(d["status"]),
+!             result=result,
+!             error=d.get("error"),
+!             risk_score=d.get("risk_score"),
+!             safety_decision=d.get("safety_decision"),
+!             screenshot_before=d.get("screenshot_before"),
+!             screenshot_after=d.get("screenshot_after"),
+!             created_at=datetime.fromisoformat(d["created_at"]),
+!             completed_at=datetime.fromisoformat(d["completed_at"]) if d.get("completed_at") else None,
+!             duration_ms=d["duration_ms"],
+!             metadata=json.loads(d["metadata"]) if isinstance(d.get("metadata"), str) else (d.get("metadata") or {}),
+!         )

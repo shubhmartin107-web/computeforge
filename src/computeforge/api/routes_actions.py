@@ -1,0 +1,60 @@
+from __future__ import annotations
+
+from typing import Any
+
+from fastapi import APIRouter, Body, HTTPException
+
+from computeforge.api.routes_sessions import _get_engine
+from computeforge.core.actions import ActionType
+from computeforge.core.exceptions import ActionFailed, ElementNotFound, SafetyBlocked
+
+router = APIRouter()
+
+
+@router.post("/execute")
+async def execute_action(
+    session_id: str = Body(..., embed=True),
+    action_type: str = Body(..., embed=True),
+    params: dict[str, Any] | None = Body(None, embed=True),
+):
+    """Execute an action in a session."""
+    engine = _get_engine(session_id)
+    try:
+        atype = ActionType(action_type)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Unknown action type: {action_type}")
+
+    try:
+        result = await engine.execute(atype, **(params or {}))
+        return {"success": result.success, "data": result.data, "error": result.error, "duration_ms": result.duration_ms}
+    except SafetyBlocked as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except ElementNotFound as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ActionFailed as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/batch")
+async def execute_batch(
+    session_id: str = Body(..., embed=True),
+    actions: list[dict[str, Any]] = Body(..., embed=True),
+):
+    """Execute multiple actions sequentially."""
+    engine = _get_engine(session_id)
+    results = []
+    for action in actions:
+        try:
+            atype = ActionType(action.get("type", ""))
+        except ValueError:
+            results.append({"success": False, "error": f"Unknown type: {action.get('type')}"})
+            continue
+
+        try:
+            result = await engine.execute(atype, **(action.get("params", {})))
+            results.append({"success": result.success, "data": result.data, "error": result.error, "duration_ms": result.duration_ms})
+        except Exception as e:
+            results.append({"success": False, "error": str(e)})
+            break
+
+    return {"results": results, "total": len(results)}

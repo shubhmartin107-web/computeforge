@@ -1,0 +1,216 @@
+> from __future__ import annotations
+  
+> import asyncio
+> import time
+> from collections.abc import Callable
+> from datetime import datetime
+  
+> from computeforge.core.actions import ActionRequest, ActionResult
+> from computeforge.models.action import ActionRecord, ActionStatus
+> from computeforge.models.session import Session
+> from computeforge.observability.storage import StorageBackend
+  
+  
+> class SessionRecorder:
+>     """Advanced session recorder with real-time streaming, event tracking, and annotation support.
+  
+>     Features:
+>     - Records all actions with full context
+>     - Real-time observer notifications
+>     - Screenshot capture integration
+>     - Safety decision recording
+>     - Performance metrics tracking
+>     - Event stream for live dashboard
+>     - Annotation support
+>     """
+  
+>     def __init__(self, storage: StorageBackend | None = None):
+!         self._storage = storage or StorageBackend()
+!         self._connected = False
+!         self._current_session: Session | None = None
+!         self._observers: list[Callable] = []
+!         self._action_buffer: list[ActionRecord] = []
+!         self._buffer_size = 10
+!         self._start_time: float = 0.0
+!         self._last_flush_time: float = 0.0
+  
+>     @property
+>     def storage(self) -> StorageBackend:
+!         return self._storage
+  
+>     @property
+>     def current_session(self) -> Session | None:
+!         return self._current_session
+  
+>     def add_observer(self, callback: Callable) -> None:
+>         """Add an observer that receives (action_record, result) events in real-time."""
+!         self._observers.append(callback)
+  
+>     def remove_observer(self, callback: Callable) -> None:
+!         self._observers.remove(callback)
+  
+      # ─── Lifecycle ────────────────────────────────────────────────────
+  
+>     async def connect(self) -> None:
+!         if not self._connected:
+!             await self._storage.connect()
+!             self._connected = True
+  
+>     async def close(self) -> None:
+!         await self.flush()
+!         if self._connected:
+!             await self._storage.close()
+!             self._connected = False
+  
+>     async def flush(self) -> None:
+!         for action in self._action_buffer:
+!             await self._storage.save_action(action)
+!         self._action_buffer.clear()
+!         self._last_flush_time = time.time()
+  
+      # ─── Session Recording ────────────────────────────────────────────
+  
+>     async def record_session_create(self, session: Session) -> None:
+!         await self._storage.save_session(session)
+!         self._current_session = session
+!         self._start_time = time.time()
+!         await self._storage.save_event(session.id, "session_created", {
+!             "session_id": session.id,
+!             "config": session.config.model_dump(),
+!             "timestamp": datetime.utcnow().isoformat(),
+!         })
+  
+>     async def record_session_update(self, session: Session) -> None:
+!         await self._storage.save_session(session)
+!         if self._current_session:
+!             self._current_session = session
+  
+>     async def record_session_end(self, session: Session) -> None:
+!         await self._storage.save_session(session)
+!         await self.flush()
+!         await self._storage.save_event(session.id, "session_ended", {
+!             "session_id": session.id,
+!             "status": session.status.value,
+!             "action_count": session.action_count,
+!             "duration_seconds": time.time() - self._start_time,
+!             "error": session.error,
+!             "timestamp": datetime.utcnow().isoformat(),
+!         })
+  
+      # ─── Action Recording ─────────────────────────────────────────────
+  
+>     async def record_action(
+>         self,
+>         request: ActionRequest,
+>         result: ActionResult | None = None,
+>         error: str | None = None,
+>         safety_decision: str | None = None,
+>         risk_score: float | None = None,
+>         screenshot_before: str | None = None,
+>         screenshot_after: str | None = None,
+>     ) -> ActionRecord:
+!         if result is not None:
+!             duration = result.duration_ms
+!             if result.success:
+!                 status = ActionStatus.SUCCEEDED
+!             else:
+!                 status = ActionStatus.FAILED
+!                 error = error or result.error
+!         else:
+!             duration = 0.0
+!             status = ActionStatus.BLOCKED if safety_decision == "deny" else ActionStatus.FAILED
+  
+!         record = ActionRecord(
+!             session_id=self._current_session.id if self._current_session else "",
+!             type=request.type.value if hasattr(request.type, "value") else str(request.type),
+!             params=request.params,
+!             status=status,
+!             result=result.data if result else None,
+!             error=error,
+!             risk_score=risk_score,
+!             safety_decision=safety_decision,
+!             screenshot_before=screenshot_before,
+!             screenshot_after=screenshot_after,
+!             duration_ms=duration,
+!         )
+  
+          # Buffer and batch-save for performance
+!         self._action_buffer.append(record)
+!         if len(self._action_buffer) >= self._buffer_size:
+!             await self.flush()
+  
+          # Notify observers
+!         for observer in self._observers:
+!             try:
+!                 if asyncio.iscoroutinefunction(observer):
+!                     await observer(record, result)
+!                 else:
+!                     observer(record, result)
+!             except Exception:
+!                 pass
+  
+          # Save event for live streaming
+!         if self._current_session:
+!             await self._storage.save_event(
+!                 self._current_session.id,
+!                 "action_completed",
+!                 {
+!                     "action_id": record.id,
+!                     "type": record.type,
+!                     "status": record.status.value,
+!                     "duration_ms": record.duration_ms,
+!                     "error": record.error,
+!                 },
+!             )
+  
+!         return record
+  
+>     async def record_safety_block(
+>         self,
+>         request: ActionRequest,
+>         reason: str,
+>         risk_score: float | None = None,
+>     ) -> ActionRecord:
+!         return await self.record_action(
+!             request=request,
+!             result=ActionResult(success=False, action_type=request.type, error=reason),
+!             error=reason,
+!             safety_decision="deny",
+!             risk_score=risk_score,
+!         )
+  
+      # ─── Batch Operations ──────────────────────────────────────────────
+  
+>     async def record_actions_batch(self, records: list[tuple[ActionRequest, ActionResult]]) -> list[ActionRecord]:
+!         recorded = []
+!         for request, result in records:
+!             record = await self.record_action(request, result=result)
+!             recorded.append(record)
+!         await self.flush()
+!         return recorded
+  
+      # ─── Annotation ────────────────────────────────────────────────────
+  
+>     async def add_annotation(self, content: str, action_id: str | None = None, atype: str = "note") -> str | None:
+!         if self._current_session:
+!             return await self._storage.add_annotation(
+!                 self._current_session.id, content, action_id, atype
+!             )
+!         return None
+  
+      # ─── Hook Factory ──────────────────────────────────────────────────
+  
+>     def make_recorder_hooks(self) -> tuple[Callable, Callable, Callable]:
+>         """Create pre-action, post-action, and safety hooks for ComputeEngine."""
+!         recorder = self
+  
+!         async def pre_hook(request: ActionRequest) -> None:
+!             pass
+  
+!         async def post_hook(request: ActionRequest, result: ActionResult) -> None:
+!             await recorder.record_action(request, result=result)
+  
+!         async def safety_hook(request: ActionRequest) -> None:
+!             pass
+  
+!         return pre_hook, post_hook, safety_hook

@@ -1,0 +1,112 @@
+> from __future__ import annotations
+  
+> import enum
+> import time
+> import uuid
+> from dataclasses import dataclass, field
+> from typing import Any
+  
+  
+> class ActionType(str, enum.Enum):
+>     """All supported action types in the ComputeForge system."""
+  
+>     NAVIGATE = "navigate"
+>     CLICK = "click"
+>     TYPE = "type"
+>     SCROLL = "scroll"
+>     SCREENSHOT = "screenshot"
+>     WAIT = "wait"
+>     EXTRACT_TEXT = "extract_text"
+>     EXTRACT_HTML = "extract_html"
+>     HOVER = "hover"
+>     DOUBLE_CLICK = "double_click"
+>     RIGHT_CLICK = "right_click"
+>     DRAG_AND_DROP = "drag_and_drop"
+>     SELECT_OPTION = "select_option"
+>     PRESS_KEY = "press_key"
+>     EVALUATE = "evaluate"
+>     GO_BACK = "go_back"
+>     GO_FORWARD = "go_forward"
+>     REFRESH = "refresh"
+>     GET_URL = "get_url"
+>     GET_TITLE = "get_title"
+>     SET_VIEWPORT = "set_viewport"
+>     INJECT_CSS = "inject_css"
+>     GET_COOKIES = "get_cookies"
+>     CLEAR_COOKIES = "clear_cookies"
+      # Desktop actions (future backends)
+>     DESKTOP_CLICK = "desktop_click"
+>     DESKTOP_TYPE = "desktop_type"
+>     DESKTOP_SCREENSHOT = "desktop_screenshot"
+>     DESKTOP_MOVE = "desktop_move"
+>     DESKTOP_KEYPRESS = "desktop_keypress"
+>     DESKTOP_SCROLL = "desktop_scroll"
+  
+  
+> @dataclass
+> class ActionResult:
+>     """The result of executing a single action."""
+  
+>     success: bool
+>     action_id: str = ""
+>     action_type: ActionType = ActionType.SCREENSHOT
+>     data: Any = None
+>     error: str | None = None
+>     duration_ms: float = 0.0
+>     metadata: dict[str, Any] = field(default_factory=dict)
+  
+>     def to_dict(self) -> dict[str, Any]:
+!         return {
+!             "success": self.success,
+!             "action_id": self.action_id,
+!             "action_type": self.action_type.value if isinstance(self.action_type, ActionType) else self.action_type,
+!             "data": self.data,
+!             "error": self.error,
+!             "duration_ms": self.duration_ms,
+!             "metadata": self.metadata,
+!         }
+  
+  
+> _action_registry: dict[ActionType, Any] = {}
+  
+  
+> def register_action(action_type: ActionType):
+>     """Decorator to register an action handler."""
+!     def decorator(func):
+!         _action_registry[action_type] = func
+!         return func
+!     return decorator
+  
+  
+> def get_action_handler(action_type: ActionType):
+>     """Retrieve the registered handler for an action type."""
+!     handler = _action_registry.get(action_type)
+!     if handler is None:
+!         raise ValueError(f"No handler registered for action type: {action_type}")
+!     return handler
+  
+  
+> def list_registered_actions() -> list[ActionType]:
+!     return list(_action_registry.keys())
+  
+  
+> def generate_action_id() -> str:
+>     return str(uuid.uuid4())
+  
+  
+> @dataclass
+> class ActionRequest:
+>     """A request to execute an action."""
+  
+>     type: ActionType
+>     params: dict[str, Any] = field(default_factory=dict)
+>     id: str = field(default_factory=generate_action_id)
+>     created_at: float = field(default_factory=time.time)
+  
+>     def to_dict(self) -> dict[str, Any]:
+!         return {
+!             "id": self.id,
+!             "type": self.type.value if isinstance(self.type, ActionType) else self.type,
+!             "params": self.params,
+!             "created_at": self.created_at,
+!         }

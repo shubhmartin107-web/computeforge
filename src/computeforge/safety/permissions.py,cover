@@ -1,0 +1,277 @@
+! from __future__ import annotations
+  
+! from computeforge.models.capability import Capability, ParameterDef, RiskLevel
+  
+  
+! class CapabilityRegistry:
+!     """Registry of all capabilities the system can perform, with permission metadata."""
+  
+!     def __init__(self):
+!         self._capabilities: dict[str, Capability] = {}
+!         self._register_builtins()
+  
+!     def register(self, capability: Capability) -> None:
+!         self._capabilities[capability.name] = capability
+  
+!     def get(self, name: str) -> Capability | None:
+!         return self._capabilities.get(name)
+  
+!     def list(self, category: str | None = None) -> list[Capability]:
+!         if category:
+!             return [c for c in self._capabilities.values() if c.category == category]
+!         return list(self._capabilities.values())
+  
+!     def get_risk_level(self, action_type: str) -> RiskLevel:
+!         for cap in self._capabilities.values():
+!             if cap.action_type == action_type:
+!                 return cap.risk_level
+!         return RiskLevel.MEDIUM
+  
+!     def get_required_permissions(self, action_type: str) -> list[str]:
+!         for cap in self._capabilities.values():
+!             if cap.action_type == action_type:
+!                 return cap.required_permissions
+!         return []
+  
+!     def _register_builtins(self) -> None:
+!         builtins = [
+!             Capability(
+!                 name="browser.navigate",
+!                 description="Navigate to a URL",
+!                 action_type="navigate",
+!                 risk_level=RiskLevel.MEDIUM,
+!                 required_permissions=["browser.navigate"],
+!                 parameters=[ParameterDef(name="url", type="string", description="Target URL", required=True)],
+!                 category="browser",
+!             ),
+!             Capability(
+!                 name="browser.click",
+!                 description="Click on an element",
+!                 action_type="click",
+!                 risk_level=RiskLevel.LOW,
+!                 required_permissions=["browser.interact"],
+!                 parameters=[
+!                     ParameterDef(name="selector", type="string", description="CSS selector", required=False),
+!                 ],
+!                 category="browser",
+!             ),
+!             Capability(
+!                 name="browser.type",
+!                 description="Type text into an element",
+!                 action_type="type",
+!                 risk_level=RiskLevel.LOW,
+!                 required_permissions=["browser.interact"],
+!                 parameters=[
+!                     ParameterDef(name="text", type="string", description="Text to type", required=True),
+!                     ParameterDef(name="selector", type="string", description="Target selector", required=False),
+!                 ],
+!                 category="browser",
+!             ),
+!             Capability(
+!                 name="browser.screenshot",
+!                 description="Take a screenshot of the current page",
+!                 action_type="screenshot",
+!                 risk_level=RiskLevel.LOW,
+!                 required_permissions=["browser.screenshot"],
+!                 category="browser",
+!             ),
+!             Capability(
+!                 name="browser.scroll",
+!                 description="Scroll the page",
+!                 action_type="scroll",
+!                 risk_level=RiskLevel.LOW,
+!                 required_permissions=["browser.interact"],
+!                 category="browser",
+!             ),
+!             Capability(
+!                 name="browser.extract_text",
+!                 description="Extract text from the page",
+!                 action_type="extract_text",
+!                 risk_level=RiskLevel.LOW,
+!                 required_permissions=["browser.read"],
+!                 category="browser",
+!             ),
+!             Capability(
+!                 name="browser.evaluate",
+!                 description="Execute JavaScript in the page context",
+!                 action_type="evaluate",
+!                 risk_level=RiskLevel.CRITICAL,
+!                 required_permissions=["browser.evaluate"],
+!                 parameters=[ParameterDef(name="script", type="string", description="JavaScript code", required=True)],
+!                 category="browser",
+!             ),
+!             Capability(
+!                 name="desktop.click",
+!                 description="Click at screen coordinates",
+!                 action_type="desktop_click",
+!                 risk_level=RiskLevel.HIGH,
+!                 required_permissions=["desktop.control"],
+!                 parameters=[
+!                     ParameterDef(name="x", type="integer", description="X coordinate", required=True),
+!                     ParameterDef(name="y", type="integer", description="Y coordinate", required=True),
+!                 ],
+!                 category="desktop",
+!             ),
+!             Capability(
+!                 name="desktop.screenshot",
+!                 description="Capture desktop screen",
+!                 action_type="desktop_screenshot",
+!                 risk_level=RiskLevel.MEDIUM,
+!                 required_permissions=["desktop.screenshot"],
+!                 category="desktop",
+!             ),
+!             Capability(
+!                 name="desktop.type",
+!                 description="Type text at OS level",
+!                 action_type="desktop_type",
+!                 risk_level=RiskLevel.HIGH,
+!                 required_permissions=["desktop.control"],
+!                 category="desktop",
+!             ),
+!             Capability(
+!                 name="browser.extract_html",
+!                 description="Extract HTML from the page or element",
+!                 action_type="extract_html",
+!                 risk_level=RiskLevel.LOW,
+!                 required_permissions=["browser.read"],
+!                 category="browser",
+!             ),
+!             Capability(
+!                 name="browser.hover",
+!                 description="Hover over an element",
+!                 action_type="hover",
+!                 risk_level=RiskLevel.LOW,
+!                 required_permissions=["browser.interact"],
+!                 category="browser",
+!             ),
+!             Capability(
+!                 name="browser.go_back",
+!                 description="Navigate back in history",
+!                 action_type="go_back",
+!                 risk_level=RiskLevel.LOW,
+!                 required_permissions=["browser.navigate"],
+!                 category="browser",
+!             ),
+!             Capability(
+!                 name="browser.go_forward",
+!                 description="Navigate forward in history",
+!                 action_type="go_forward",
+!                 risk_level=RiskLevel.LOW,
+!                 required_permissions=["browser.navigate"],
+!                 category="browser",
+!             ),
+!             Capability(
+!                 name="browser.refresh",
+!                 description="Refresh the current page",
+!                 action_type="refresh",
+!                 risk_level=RiskLevel.LOW,
+!                 required_permissions=["browser.navigate"],
+!                 category="browser",
+!             ),
+!             Capability(
+!                 name="browser.wait",
+!                 description="Wait for a specified duration",
+!                 action_type="wait",
+!                 risk_level=RiskLevel.LOW,
+!                 required_permissions=["browser.read"],
+!                 category="browser",
+!             ),
+!             Capability(
+!                 name="browser.get_url",
+!                 description="Get the current page URL",
+!                 action_type="get_url",
+!                 risk_level=RiskLevel.LOW,
+!                 required_permissions=["browser.read"],
+!                 category="browser",
+!             ),
+!             Capability(
+!                 name="browser.get_title",
+!                 description="Get the current page title",
+!                 action_type="get_title",
+!                 risk_level=RiskLevel.LOW,
+!                 required_permissions=["browser.read"],
+!                 category="browser",
+!             ),
+!             Capability(
+!                 name="browser.set_viewport",
+!                 description="Set the browser viewport size",
+!                 action_type="set_viewport",
+!                 risk_level=RiskLevel.LOW,
+!                 required_permissions=["browser.interact"],
+!                 category="browser",
+!             ),
+!             Capability(
+!                 name="browser.press_key",
+!                 description="Press a keyboard key",
+!                 action_type="press_key",
+!                 risk_level=RiskLevel.LOW,
+!                 required_permissions=["browser.interact"],
+!                 category="browser",
+!             ),
+!             Capability(
+!                 name="browser.select_option",
+!                 description="Select an option from a dropdown",
+!                 action_type="select_option",
+!                 risk_level=RiskLevel.LOW,
+!                 required_permissions=["browser.interact"],
+!                 category="browser",
+!             ),
+!             Capability(
+!                 name="browser.double_click",
+!                 description="Double-click on an element",
+!                 action_type="double_click",
+!                 risk_level=RiskLevel.LOW,
+!                 required_permissions=["browser.interact"],
+!                 category="browser",
+!             ),
+!             Capability(
+!                 name="browser.right_click",
+!                 description="Right-click on an element",
+!                 action_type="right_click",
+!                 risk_level=RiskLevel.LOW,
+!                 required_permissions=["browser.interact"],
+!                 category="browser",
+!             ),
+!             Capability(
+!                 name="browser.drag_and_drop",
+!                 description="Drag and drop an element",
+!                 action_type="drag_and_drop",
+!                 risk_level=RiskLevel.MEDIUM,
+!                 required_permissions=["browser.interact"],
+!                 category="browser",
+!             ),
+!             Capability(
+!                 name="browser.inject_css",
+!                 description="Inject custom CSS into the page",
+!                 action_type="inject_css",
+!                 risk_level=RiskLevel.MEDIUM,
+!                 required_permissions=["browser.evaluate"],
+!                 category="browser",
+!             ),
+!             Capability(
+!                 name="desktop.move",
+!                 description="Move the mouse to screen coordinates",
+!                 action_type="desktop_move",
+!                 risk_level=RiskLevel.HIGH,
+!                 required_permissions=["desktop.control"],
+!                 category="desktop",
+!             ),
+!             Capability(
+!                 name="desktop.keypress",
+!                 description="Press a key at the OS level",
+!                 action_type="desktop_keypress",
+!                 risk_level=RiskLevel.HIGH,
+!                 required_permissions=["desktop.control"],
+!                 category="desktop",
+!             ),
+!             Capability(
+!                 name="desktop.scroll",
+!                 description="Scroll at the OS level",
+!                 action_type="desktop_scroll",
+!                 risk_level=RiskLevel.HIGH,
+!                 required_permissions=["desktop.control"],
+!                 category="desktop",
+!             ),
+!         ]
+!         for cap in builtins:
+!             self._capabilities[cap.name] = cap

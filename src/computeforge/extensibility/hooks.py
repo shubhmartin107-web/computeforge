@@ -1,0 +1,118 @@
+from __future__ import annotations
+
+import logging
+from collections.abc import Callable
+from dataclasses import dataclass
+from enum import Enum
+from typing import Any
+
+from computeforge.core.actions import ActionRequest, ActionResult
+from computeforge.core.exceptions import SafetyBlocked
+
+logger = logging.getLogger("computeforge.extensibility.hooks")
+
+
+class HookPoint(str, Enum):
+    BEFORE_ACTION = "before_action"
+    AFTER_ACTION = "after_action"
+    ON_ERROR = "on_error"
+    SAFETY_CHECK = "safety_check"
+    SESSION_START = "session_start"
+    SESSION_END = "session_end"
+    PROVIDER_CALL = "provider_call"
+
+
+@dataclass
+class Hook:
+    """A registered hook with metadata."""
+    name: str
+    hook_point: HookPoint
+    callback: Callable
+    priority: int = 10
+    description: str = ""
+    enabled: bool = True
+
+
+class HookRegistry:
+    """Registry for lifecycle hooks that plugins can attach to."""
+
+    def __init__(self):
+        self._hooks: dict[HookPoint, list[Hook]] = {}
+        for hp in HookPoint:
+            self._hooks[hp] = []
+
+    def register(self, hook: Hook) -> None:
+        self._hooks[hook.hook_point].append(hook)
+        self._hooks[hook.hook_point].sort(key=lambda h: h.priority)
+        logger.info(f"Registered hook '{hook.name}' at {hook.hook_point.value}")
+
+    def unregister(self, name: str, hook_point: HookPoint | None = None) -> None:
+        if hook_point:
+            self._hooks[hook_point] = [h for h in self._hooks[hook_point] if h.name != name]
+        else:
+            for hp in HookPoint:
+                self._hooks[hp] = [h for h in self._hooks[hp] if h.name != name]
+
+    def get_hooks(self, hook_point: HookPoint) -> list[Hook]:
+        return [h for h in self._hooks[hook_point] if h.enabled]
+
+    async def dispatch_before_action(self, request: ActionRequest) -> ActionRequest:
+        for hook in self.get_hooks(HookPoint.BEFORE_ACTION):
+            try:
+                result = hook.callback(request)
+                if hasattr(result, "__await__"):
+                    result = await result
+                if result is not None:
+                    request = result
+            except SafetyBlocked:
+                raise
+            except Exception as e:
+                logger.warning(f"Hook '{hook.name}' before_action error: {e}")
+        return request
+
+    async def dispatch_after_action(self, request: ActionRequest, result: ActionResult) -> None:
+        for hook in self.get_hooks(HookPoint.AFTER_ACTION):
+            try:
+                r = hook.callback(request, result)
+                if hasattr(r, "__await__"):
+                    await r
+            except Exception as e:
+                logger.warning(f"Hook '{hook.name}' after_action error: {e}")
+
+    async def dispatch_safety_check(self, request: ActionRequest) -> None:
+        for hook in self.get_hooks(HookPoint.SAFETY_CHECK):
+            try:
+                r = hook.callback(request)
+                if hasattr(r, "__await__"):
+                    await r
+            except SafetyBlocked:
+                raise
+            except Exception as e:
+                logger.warning(f"Hook '{hook.name}' safety_check error: {e}")
+
+    async def dispatch_error(self, error: Exception, context: dict[str, Any]) -> None:
+        for hook in self.get_hooks(HookPoint.ON_ERROR):
+            try:
+                r = hook.callback(error, context)
+                if hasattr(r, "__await__"):
+                    await r
+            except Exception as e:
+                logger.warning(f"Hook '{hook.name}' on_error error: {e}")
+
+    async def dispatch_session_start(self, session_id: str, config: dict[str, Any]) -> None:
+        for hook in self.get_hooks(HookPoint.SESSION_START):
+            try:
+                r = hook.callback(session_id, config)
+                if hasattr(r, "__await__"):
+                    await r
+            except Exception as e:
+                logger.warning(f"Hook '{hook.name}' session_start error: {e}")
+
+    async def dispatch_session_end(self, session_id: str, status: str) -> None:
+        for hook in self.get_hooks(HookPoint.SESSION_END):
+            try:
+                r = hook.callback(session_id, status)
+                if hasattr(r, "__await__"):
+                    await r
+            except Exception as e:
+                logger.warning(f"Hook '{hook.name}' session_end error: {e}")

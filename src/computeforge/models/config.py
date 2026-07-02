@@ -1,0 +1,48 @@
+from __future__ import annotations
+
+from pydantic import BaseModel, Field
+from pydantic_settings import BaseSettings
+
+
+class BrowserConfig(BaseModel):
+    """Browser configuration."""
+    headless: bool = True
+    viewport_width: int = 1280
+    viewport_height: int = 720
+    locale: str = "en-US"
+    user_agent: str | None = None
+    slow_mo: int = 0
+    timeout_ms: int = 30000
+
+
+class SafetyConfig(BaseModel):
+    """Safety and permission configuration."""
+    enabled: bool = True
+    policy_file: str | None = None
+    risk_threshold: str = "high"
+    require_confirmation_for: list[str] = Field(default_factory=lambda: ["navigate", "desktop_click", "type"])
+    blocklist_domains: list[str] = Field(default_factory=list)
+    max_actions_per_session: int = 200
+    allow_dangerous_js: bool = False
+
+
+class StorageConfig(BaseModel):
+    """Storage configuration."""
+    database_url: str = "sqlite+aiosqlite:///$HOME/.computeforge/sessions.db"
+    screenshot_dir: str = "$HOME/.computeforge/screenshots"
+    session_dir: str = "$HOME/.computeforge/sessions"
+    max_screenshots_per_session: int = 500
+    auto_cleanup_days: int = 30
+
+
+class EngineConfig(BaseSettings, BaseModel):
+    """Top-level engine configuration."""
+    browser: BrowserConfig = Field(default_factory=BrowserConfig)
+    safety: SafetyConfig = Field(default_factory=SafetyConfig)
+    storage: StorageConfig = Field(default_factory=StorageConfig)
+    default_provider: str = "deepseek"
+    max_concurrent_actions: int = 1
+    log_level: str = "INFO"
+    workspace_dir: str = "$HOME/.computeforge"
+
+    model_config = {"env_prefix": "COMPUTEFORGE_"}
