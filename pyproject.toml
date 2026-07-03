@@ -55,9 +55,9 @@ dependencies = [
 [project.urls]
 Homepage = "https://computeforge.ai"
 Documentation = "https://computeforge.ai/docs"
-Source = "https://github.com/anomalyco/computeforge"
-Issues = "https://github.com/anomalyco/computeforge/issues"
-Changelog = "https://github.com/anomalyco/computeforge/blob/main/CHANGELOG.md"
+Source = "https://github.com/shubhmartin107-web/computeforge"
+Issues = "https://github.com/shubhmartin107-web/computeforge/issues"
+Changelog = "https://github.com/shubhmartin107-web/computeforge/blob/main/CHANGELOG.md"
 
 [project.scripts]
 computeforge = "computeforge.cli.app:app"

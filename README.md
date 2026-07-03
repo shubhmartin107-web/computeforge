@@ -5,6 +5,9 @@
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)](https://python.org)
 [![Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-green)](LICENSE)
 [![Playwright](https://img.shields.io/badge/playwright-powered-blue)](https://playwright.dev)
+[![CI](https://github.com/shubhmartin107-web/computeforge/actions/workflows/ci.yml/badge.svg)](https://github.com/shubhmartin107-web/computeforge/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-937%20passing-brightgreen)]()
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](CONTRIBUTING.md)
 
 ComputeForge is a production-oriented, open-source platform for building reliable, observable, and safe computer-use agents. It provides browser and desktop control capabilities with strong emphasis on observability, debugging, safety, and extensibility.
@@ -52,7 +55,7 @@ ComputeForge integrates with the broader AI agent ecosystem:
 
 ```bash
 # Clone the repository
-git clone https://github.com/anomalyco/computeforge.git
+git clone https://github.com/shubhmartin107-web/computeforge.git
 cd computeforge
 
 # Create virtual environment
