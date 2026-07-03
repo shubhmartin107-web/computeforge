@@ -486,22 +486,28 @@ class StorageBackend:
     async def get_session_stats(self) -> dict[str, Any]:
         assert self._conn is not None
         total = await (await self._conn.execute("SELECT COUNT(*) FROM sessions")).fetchall()
-        by_status = await (await self._conn.execute(
-            "SELECT status, COUNT(*) as count FROM sessions GROUP BY status"
-        )).fetchall()
+        by_status = await (
+            await self._conn.execute(
+                "SELECT status, COUNT(*) as count FROM sessions GROUP BY status"
+            )
+        ).fetchall()
         total_actions = await (await self._conn.execute("SELECT COUNT(*) FROM actions")).fetchall()
-        succeeded = await (await self._conn.execute(
-            "SELECT COUNT(*) FROM actions WHERE status = 'succeeded'"
-        )).fetchall()
-        failed = await (await self._conn.execute(
-            "SELECT COUNT(*) FROM actions WHERE status = 'failed'"
-        )).fetchall()
-        avg_duration = await (await self._conn.execute(
-            "SELECT AVG(duration_ms) FROM actions WHERE status = 'succeeded'"
-        )).fetchall()
-        top_types = await (await self._conn.execute(
-            "SELECT type, COUNT(*) as count FROM actions GROUP BY type ORDER BY count DESC LIMIT 10"
-        )).fetchall()
+        succeeded = await (
+            await self._conn.execute("SELECT COUNT(*) FROM actions WHERE status = 'succeeded'")
+        ).fetchall()
+        failed = await (
+            await self._conn.execute("SELECT COUNT(*) FROM actions WHERE status = 'failed'")
+        ).fetchall()
+        avg_duration = await (
+            await self._conn.execute(
+                "SELECT AVG(duration_ms) FROM actions WHERE status = 'succeeded'"
+            )
+        ).fetchall()
+        top_types = await (
+            await self._conn.execute(
+                "SELECT type, COUNT(*) as count FROM actions GROUP BY type ORDER BY count DESC LIMIT 10"
+            )
+        ).fetchall()
 
         total_list = list(total)
         by_status_list = list(by_status)

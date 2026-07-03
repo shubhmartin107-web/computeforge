@@ -124,7 +124,9 @@ class ReplayEngine:
                     img = Image.open(io.BytesIO(img_bytes))
                     if max_width and img.width > max_width:
                         ratio = max_width / img.width
-                        img = img.resize((max_width, int(img.height * ratio)), Image.Resampling.LANCZOS)  # type: ignore[assignment]
+                        img = img.resize(
+                            (max_width, int(img.height * ratio)), Image.Resampling.LANCZOS
+                        )  # type: ignore[assignment]
                     frames.append(img)
 
         if not frames:

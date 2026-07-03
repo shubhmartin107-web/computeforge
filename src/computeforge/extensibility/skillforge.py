@@ -44,6 +44,7 @@ class SkillForgeAdapter:
         if self._local:
             try:
                 import skillforge  # noqa: F401
+
                 self._skillforge_available = True
                 self._enabled = True
                 logger.info("Local SkillForge available")
