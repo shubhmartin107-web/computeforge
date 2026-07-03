@@ -20,7 +20,9 @@ PROVIDER_MAP: dict[str, type[LLMProvider]] = {
 }
 
 
-def create_provider(name: str, api_key: str | None = None, model: str | None = None, base_url: str | None = None) -> LLMProvider:
+def create_provider(
+    name: str, api_key: str | None = None, model: str | None = None, base_url: str | None = None
+) -> LLMProvider:
     """Factory function to create a provider by name."""
     provider_cls = PROVIDER_MAP.get(name.lower())
     if provider_cls is None:
@@ -32,7 +34,13 @@ def create_provider(name: str, api_key: str | None = None, model: str | None = N
         base_url=base_url,
     )
     if not config.model:
-        defaults = {"deepseek": "deepseek-chat", "openai": "gpt-4o", "ollama": "llama3", "groq": "llama-3.3-70b-versatile", "gemini": "gemini-2.0-flash"}
+        defaults = {
+            "deepseek": "deepseek-chat",
+            "openai": "gpt-4o",
+            "ollama": "llama3",
+            "groq": "llama-3.3-70b-versatile",
+            "gemini": "gemini-2.0-flash",
+        }
         config.model = defaults.get(name.lower(), "")
 
     return provider_cls(config=config)

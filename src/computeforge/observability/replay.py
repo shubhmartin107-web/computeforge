@@ -112,7 +112,7 @@ class ReplayEngine:
         try:
             from PIL import Image
         except ImportError:
-            raise ImportError("Pillow is required for GIF generation")
+            raise ImportError("Pillow is required for GIF generation") from None
 
         actions = await self.get_actions(session_id)
         frames = []
@@ -124,7 +124,7 @@ class ReplayEngine:
                     img = Image.open(io.BytesIO(img_bytes))
                     if max_width and img.width > max_width:
                         ratio = max_width / img.width
-                        img = img.resize((max_width, int(img.height * ratio)), Image.LANCZOS)
+                        img = img.resize((max_width, int(img.height * ratio)), Image.Resampling.LANCZOS)  # type: ignore[assignment]
                     frames.append(img)
 
         if not frames:
@@ -154,7 +154,8 @@ class ReplayEngine:
         summary = await self.get_session_summary(session_id)
         actions = await self.get_actions(session_id)
 
-        html_parts = [f"""<!DOCTYPE html>
+        html_parts = [
+            f"""<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><title>Session Report - {session_id[:8]}</title>
 <style>
@@ -173,35 +174,41 @@ img {{ max-width: 100%; border: 1px solid #ddd; border-radius: 4px; }}
 <div class="summary">
 <h2>Session Summary</h2>
 <table>
-<tr><td>ID</td><td>{summary['session_id']}</td></tr>
-<tr><td>Status</td><td>{summary['status']}</td></tr>
-<tr><td>Total Actions</td><td>{summary['total_actions']}</td></tr>
-<tr><td>Success Rate</td><td>{summary['success_rate']}%</td></tr>
-<tr><td>Total Duration</td><td>{summary['total_duration_ms']}ms</td></tr>
+<tr><td>ID</td><td>{summary["session_id"]}</td></tr>
+<tr><td>Status</td><td>{summary["status"]}</td></tr>
+<tr><td>Total Actions</td><td>{summary["total_actions"]}</td></tr>
+<tr><td>Success Rate</td><td>{summary["success_rate"]}%</td></tr>
+<tr><td>Total Duration</td><td>{summary["total_duration_ms"]}ms</td></tr>
 </table>
 </div>
-"""]
+"""
+        ]
 
         for i, a in enumerate(actions):
-            css_class = a.status.value if a.status.value in ('succeeded', 'failed', 'blocked') else ''
+            css_class = (
+                a.status.value if a.status.value in ("succeeded", "failed", "blocked") else ""
+            )
             html_parts.append(f'<div class="action {css_class}">')
-            html_parts.append(f'<h3>Step {i}: {a.type} <span class="meta">({a.duration_ms:.0f}ms)</span></h3>')
+            html_parts.append(
+                f'<h3>Step {i}: {a.type} <span class="meta">({a.duration_ms:.0f}ms)</span></h3>'
+            )
             html_parts.append(f'<p class="meta">Status: {a.status.value}')
             if a.error:
-                html_parts.append(f' | Error: {a.error}')
-            html_parts.append('</p>')
+                html_parts.append(f" | Error: {a.error}")
+            html_parts.append("</p>")
             if a.params:
-                html_parts.append(f'<pre>{json.dumps(a.params, indent=2)}</pre>')
+                html_parts.append(f"<pre>{json.dumps(a.params, indent=2)}</pre>")
             if a.screenshot_after:
                 img_bytes = self._storage.load_screenshot(a.screenshot_after)
                 if img_bytes:
                     import base64
+
                     b64 = base64.b64encode(img_bytes).decode()
                     html_parts.append(f'<img src="data:image/png;base64,{b64}" />')
-            html_parts.append('</div>')
+            html_parts.append("</div>")
 
-        html_parts.append('</body></html>')
-        return '\n'.join(html_parts)
+        html_parts.append("</body></html>")
+        return "\n".join(html_parts)
 
     async def export_markdown(self, session_id: str) -> str:
         """Export session to Markdown."""
@@ -231,7 +238,7 @@ img {{ max-width: 100%; border: 1px solid #ddd; border-radius: 4px; }}
                 lines.append(f"- Params: `{json.dumps(a.params)}`")
             lines.append("")
 
-        return '\n'.join(lines)
+        return "\n".join(lines)
 
     # ─── Comparison ────────────────────────────────────────────────────
 
@@ -242,7 +249,7 @@ img {{ max-width: 100%; border: 1px solid #ddd; border-radius: 4px; }}
             try:
                 summary = await self.get_session_summary(sid)
                 summaries.append(summary)
-            except Exception:
+            except Exception:  # nosec
                 continue
         return summaries
 
@@ -253,11 +260,13 @@ img {{ max-width: 100%; border: 1px solid #ddd; border-radius: 4px; }}
         results = []
         sessions = await self._storage.list_sessions(search=query, limit=limit)
         for s in sessions:
-            results.append({
-                "id": s.id,
-                "status": s.status.value,
-                "action_count": s.action_count,
-                "created_at": s.created_at.isoformat() if s.created_at else None,
-                "error": s.error,
-            })
+            results.append(
+                {
+                    "id": s.id,
+                    "status": s.status.value,
+                    "action_count": s.action_count,
+                    "created_at": s.created_at.isoformat() if s.created_at else None,
+                    "error": s.error,
+                }
+            )
         return results

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import sqlite3
 from collections.abc import AsyncGenerator
@@ -81,6 +82,7 @@ class StorageBackend:
     # ─── Schema ──────────────────────────────────────────────────────
 
     async def _init_tables(self) -> None:
+        assert self._conn is not None
         await self._conn.executescript("""
             CREATE TABLE IF NOT EXISTS sessions (
                 id TEXT PRIMARY KEY,
@@ -146,24 +148,16 @@ class StorageBackend:
         """)
 
         # Migrate existing tables if needed
-        try:
-            await self._conn.execute("ALTER TABLE sessions ADD COLUMN provider TEXT DEFAULT ''")
-        except Exception:
-            pass
-        try:
-            await self._conn.execute("ALTER TABLE sessions ADD COLUMN model TEXT DEFAULT ''")
-        except Exception:
-            pass
-        try:
-            await self._conn.execute("ALTER TABLE sessions ADD COLUMN task TEXT DEFAULT ''")
-        except Exception:
-            pass
+        for col in ("provider", "model", "task"):
+            with contextlib.suppress(Exception):
+                await self._conn.execute(f"ALTER TABLE sessions ADD COLUMN {col} TEXT DEFAULT ''")
 
         await self._conn.commit()
 
     # ─── Session Operations ──────────────────────────────────────────
 
     async def save_session(self, session: Session) -> None:
+        assert self._conn is not None
         await self._conn.execute(
             """INSERT OR REPLACE INTO sessions
                (id, status, config, created_at, updated_at, started_at, ended_at,
@@ -189,9 +183,8 @@ class StorageBackend:
         await self._conn.commit()
 
     async def load_session(self, session_id: str) -> Session:
-        cursor = await self._conn.execute(
-            "SELECT * FROM sessions WHERE id = ?", (session_id,)
-        )
+        assert self._conn is not None
+        cursor = await self._conn.execute("SELECT * FROM sessions WHERE id = ?", (session_id,))
         row = await cursor.fetchone()
         if row is None:
             raise SessionNotFound(f"Session {session_id} not found")
@@ -208,6 +201,7 @@ class StorageBackend:
         date_from: str | None = None,
         date_to: str | None = None,
     ) -> list[Session]:
+        assert self._conn is not None
         query = "SELECT * FROM sessions WHERE 1=1"
         params: list[Any] = []
 
@@ -241,6 +235,7 @@ class StorageBackend:
         status: str | None = None,
         search: str | None = None,
     ) -> int:
+        assert self._conn is not None
         query = "SELECT COUNT(*) as count FROM sessions WHERE 1=1"
         params: list[Any] = []
         if status:
@@ -254,7 +249,10 @@ class StorageBackend:
         row = await cursor.fetchone()
         return row[0] if row else 0
 
-    async def update_session_status(self, session_id: str, status: SessionStatus, error: str | None = None) -> None:
+    async def update_session_status(
+        self, session_id: str, status: SessionStatus, error: str | None = None
+    ) -> None:
+        assert self._conn is not None
         now = datetime.utcnow().isoformat()
         if status in (SessionStatus.COMPLETED, SessionStatus.FAILED, SessionStatus.CANCELLED):
             await self._conn.execute(
@@ -269,6 +267,7 @@ class StorageBackend:
         await self._conn.commit()
 
     async def delete_session(self, session_id: str) -> None:
+        assert self._conn is not None
         await self._conn.execute("DELETE FROM annotations WHERE session_id = ?", (session_id,))
         await self._conn.execute("DELETE FROM events WHERE session_id = ?", (session_id,))
         await self._conn.execute("DELETE FROM actions WHERE session_id = ?", (session_id,))
@@ -277,6 +276,7 @@ class StorageBackend:
         self._cleanup_screenshots(session_id)
 
     async def get_sessions_by_tag(self, tag: str) -> list[Session]:
+        assert self._conn is not None
         cursor = await self._conn.execute(
             "SELECT * FROM sessions WHERE tags LIKE ? ORDER BY created_at DESC",
             (f"%{tag}%",),
@@ -287,6 +287,7 @@ class StorageBackend:
     # ─── Action Operations ───────────────────────────────────────────
 
     async def save_action(self, action: ActionRecord) -> None:
+        assert self._conn is not None
         await self._conn.execute(
             """INSERT OR REPLACE INTO actions
                (id, session_id, type, params, status, result, error,
@@ -321,6 +322,7 @@ class StorageBackend:
         status: str | None = None,
         action_type: str | None = None,
     ) -> list[ActionRecord]:
+        assert self._conn is not None
         query = "SELECT * FROM actions WHERE session_id = ?"
         params: list[Any] = [session_id]
         if status:
@@ -336,13 +338,13 @@ class StorageBackend:
         return [self._row_to_action(r) for r in rows]
 
     async def load_action(self, action_id: str) -> ActionRecord | None:
-        cursor = await self._conn.execute(
-            "SELECT * FROM actions WHERE id = ?", (action_id,)
-        )
+        assert self._conn is not None
+        cursor = await self._conn.execute("SELECT * FROM actions WHERE id = ?", (action_id,))
         row = await cursor.fetchone()
         return self._row_to_action(row) if row else None
 
     async def get_action_count(self, session_id: str) -> int:
+        assert self._conn is not None
         cursor = await self._conn.execute(
             "SELECT COUNT(*) as count FROM actions WHERE session_id = ?", (session_id,)
         )
@@ -365,6 +367,7 @@ class StorageBackend:
         limit: int = 50,
         offset: int = 0,
     ) -> list[ActionRecord]:
+        assert self._conn is not None
         search = f"%{query_str}%"
         cursor = await self._conn.execute(
             """SELECT * FROM actions
@@ -376,6 +379,7 @@ class StorageBackend:
         return [self._row_to_action(r) for r in rows]
 
     async def get_action_timeline(self, session_id: str) -> list[dict[str, Any]]:
+        assert self._conn is not None
         cursor = await self._conn.execute(
             """SELECT type, status, duration_ms, created_at, error
                FROM actions WHERE session_id = ?
@@ -397,14 +401,23 @@ class StorageBackend:
     # ─── Event Operations ─────────────────────────────────────────────
 
     async def save_event(self, session_id: str, event_type: str, data: dict[str, Any]) -> None:
+        assert self._conn is not None
         import uuid
+
         await self._conn.execute(
             "INSERT INTO events (id, session_id, type, data, created_at) VALUES (?, ?, ?, ?, ?)",
-            (str(uuid.uuid4()), session_id, event_type, json.dumps(data), datetime.utcnow().isoformat()),
+            (
+                str(uuid.uuid4()),
+                session_id,
+                event_type,
+                json.dumps(data),
+                datetime.utcnow().isoformat(),
+            ),
         )
         await self._conn.commit()
 
     async def get_events(self, session_id: str, limit: int = 100) -> list[dict[str, Any]]:
+        assert self._conn is not None
         cursor = await self._conn.execute(
             "SELECT * FROM events WHERE session_id = ? ORDER BY created_at ASC LIMIT ?",
             (session_id, limit),
@@ -414,8 +427,12 @@ class StorageBackend:
 
     # ─── Annotation Operations ─────────────────────────────────────────
 
-    async def add_annotation(self, session_id: str, content: str, action_id: str | None = None, atype: str = "note") -> str:
+    async def add_annotation(
+        self, session_id: str, content: str, action_id: str | None = None, atype: str = "note"
+    ) -> str:
+        assert self._conn is not None
         import uuid
+
         aid = str(uuid.uuid4())
         await self._conn.execute(
             "INSERT INTO annotations (id, session_id, action_id, type, content, created_at) VALUES (?, ?, ?, ?, ?, ?)",
@@ -425,6 +442,7 @@ class StorageBackend:
         return aid
 
     async def get_annotations(self, session_id: str) -> list[dict[str, Any]]:
+        assert self._conn is not None
         cursor = await self._conn.execute(
             "SELECT * FROM annotations WHERE session_id = ? ORDER BY created_at ASC", (session_id,)
         )
@@ -433,7 +451,9 @@ class StorageBackend:
 
     # ─── Screenshot Operations ─────────────────────────────────────────
 
-    def save_screenshot(self, session_id: str, action_id: str, image_bytes: bytes, label: str = "") -> str:
+    def save_screenshot(
+        self, session_id: str, action_id: str, image_bytes: bytes, label: str = ""
+    ) -> str:
         session_dir = self._screenshot_dir / session_id
         session_dir.mkdir(parents=True, exist_ok=True)
         filename = f"{action_id}_{label}.png" if label else f"{action_id}.png"
@@ -458,41 +478,54 @@ class StorageBackend:
         session_dir = self._screenshot_dir / session_id
         if session_dir.exists():
             import shutil
+
             shutil.rmtree(session_dir)
 
     # ─── Statistics ────────────────────────────────────────────────────
 
     async def get_session_stats(self) -> dict[str, Any]:
-        total = await self._conn.execute_fetchall("SELECT COUNT(*) FROM sessions")
-        by_status = await self._conn.execute_fetchall(
+        assert self._conn is not None
+        total = await (await self._conn.execute("SELECT COUNT(*) FROM sessions")).fetchall()
+        by_status = await (await self._conn.execute(
             "SELECT status, COUNT(*) as count FROM sessions GROUP BY status"
-        )
-        total_actions = await self._conn.execute_fetchall("SELECT COUNT(*) FROM actions")
-        succeeded = await self._conn.execute_fetchall(
+        )).fetchall()
+        total_actions = await (await self._conn.execute("SELECT COUNT(*) FROM actions")).fetchall()
+        succeeded = await (await self._conn.execute(
             "SELECT COUNT(*) FROM actions WHERE status = 'succeeded'"
-        )
-        failed = await self._conn.execute_fetchall(
+        )).fetchall()
+        failed = await (await self._conn.execute(
             "SELECT COUNT(*) FROM actions WHERE status = 'failed'"
-        )
-        avg_duration = await self._conn.execute_fetchall(
+        )).fetchall()
+        avg_duration = await (await self._conn.execute(
             "SELECT AVG(duration_ms) FROM actions WHERE status = 'succeeded'"
-        )
-        top_types = await self._conn.execute_fetchall(
+        )).fetchall()
+        top_types = await (await self._conn.execute(
             "SELECT type, COUNT(*) as count FROM actions GROUP BY type ORDER BY count DESC LIMIT 10"
-        )
+        )).fetchall()
 
+        total_list = list(total)
+        by_status_list = list(by_status)
+        total_actions_list = list(total_actions)
+        succeeded_list = list(succeeded)
+        failed_list = list(failed)
+        avg_duration_list = list(avg_duration)
+        top_types_list = list(top_types)
         return {
-            "total_sessions": total[0][0] if total else 0,
-            "by_status": {r[0]: r[1] for r in by_status},
-            "total_actions": total_actions[0][0] if total_actions else 0,
-            "succeeded": succeeded[0][0] if succeeded else 0,
-            "failed": failed[0][0] if failed else 0,
-            "avg_duration_ms": round(avg_duration[0][0], 2) if avg_duration and avg_duration[0][0] else 0.0,
-            "top_action_types": [(r[0], r[1]) for r in top_types],
+            "total_sessions": total_list[0][0] if total_list else 0,
+            "by_status": {r[0]: r[1] for r in by_status_list},
+            "total_actions": total_actions_list[0][0] if total_actions_list else 0,
+            "succeeded": succeeded_list[0][0] if succeeded_list else 0,
+            "failed": failed_list[0][0] if failed_list else 0,
+            "avg_duration_ms": round(avg_duration_list[0][0], 2)
+            if avg_duration_list and avg_duration_list[0][0]
+            else 0.0,
+            "top_action_types": [(r[0], r[1]) for r in top_types_list],
         }
 
     async def get_daily_stats(self, days: int = 7) -> list[dict[str, Any]]:
+        assert self._conn is not None
         from datetime import timedelta
+
         cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
         cursor = await self._conn.execute(
             """SELECT DATE(created_at) as day, COUNT(*) as sessions,
@@ -505,6 +538,7 @@ class StorageBackend:
         return [{"date": r[0], "sessions": r[1], "actions": r[2] or 0} for r in rows]
 
     async def auto_cleanup(self) -> int:
+        assert self._conn is not None
         cutoff = (datetime.utcnow() - timedelta(days=self._auto_cleanup_days)).isoformat()
         cursor = await self._conn.execute(
             "SELECT id FROM sessions WHERE created_at < ? AND status IN ('completed', 'failed', 'cancelled')",
@@ -546,6 +580,7 @@ class StorageBackend:
     def _row_to_session(self, row: sqlite3.Row) -> Session:
         d = dict(row)
         from computeforge.models.session import SessionConfig
+
         return Session(
             id=d["id"],
             status=SessionStatus(d["status"]),
@@ -556,18 +591,26 @@ class StorageBackend:
             ended_at=datetime.fromisoformat(d["ended_at"]) if d.get("ended_at") else None,
             action_count=d["action_count"],
             error=d.get("error"),
-            metadata=json.loads(d["metadata"]) if isinstance(d.get("metadata"), str) else (d.get("metadata") or {}),
+            metadata=json.loads(d["metadata"])
+            if isinstance(d.get("metadata"), str)
+            else (d.get("metadata") or {}),
             tags=json.loads(d["tags"]) if isinstance(d.get("tags"), str) else (d.get("tags") or []),
         )
 
     def _row_to_action(self, row: sqlite3.Row) -> ActionRecord:
         d = dict(row)
-        result = json.loads(d["result"]) if isinstance(d.get("result"), str) and d["result"] else d.get("result")
+        result = (
+            json.loads(d["result"])
+            if isinstance(d.get("result"), str) and d["result"]
+            else d.get("result")
+        )
         return ActionRecord(
             id=d["id"],
             session_id=d["session_id"],
             type=d["type"],
-            params=json.loads(d["params"]) if isinstance(d.get("params"), str) else (d.get("params") or {}),
+            params=json.loads(d["params"])
+            if isinstance(d.get("params"), str)
+            else (d.get("params") or {}),
             status=ActionStatus(d["status"]),
             result=result,
             error=d.get("error"),
@@ -576,7 +619,11 @@ class StorageBackend:
             screenshot_before=d.get("screenshot_before"),
             screenshot_after=d.get("screenshot_after"),
             created_at=datetime.fromisoformat(d["created_at"]),
-            completed_at=datetime.fromisoformat(d["completed_at"]) if d.get("completed_at") else None,
+            completed_at=datetime.fromisoformat(d["completed_at"])
+            if d.get("completed_at")
+            else None,
             duration_ms=d["duration_ms"],
-            metadata=json.loads(d["metadata"]) if isinstance(d.get("metadata"), str) else (d.get("metadata") or {}),
+            metadata=json.loads(d["metadata"])
+            if isinstance(d.get("metadata"), str)
+            else (d.get("metadata") or {}),
         )

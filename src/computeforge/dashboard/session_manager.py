@@ -34,7 +34,9 @@ def create_session_manager_tab(storage: StorageBackend, run_async: Callable) -> 
             parts = [f"**Total Sessions:** {stats.get('total_sessions', 0)}"]
             parts.append(f"**Total Actions:** {stats.get('total_actions', 0)}")
             if by_status:
-                parts.append("**By Status:** " + ", ".join(f"{k}: {v}" for k, v in by_status.items()))
+                parts.append(
+                    "**By Status:** " + ", ".join(f"{k}: {v}" for k, v in by_status.items())
+                )
             return "\n\n".join(parts)
         except Exception as e:
             return f"Error: {e}"
@@ -57,6 +59,7 @@ def create_session_manager_tab(storage: StorageBackend, run_async: Callable) -> 
                 if s.id.startswith(session_id_prefix):
                     actions = run_async(storage.load_actions(s.id))
                     import json
+
                     export = {
                         "session": s.model_dump(),
                         "actions": [a.model_dump() for a in actions],
@@ -65,8 +68,6 @@ def create_session_manager_tab(storage: StorageBackend, run_async: Callable) -> 
             return "Session not found"
         except Exception as e:
             return f"Error: {e}"
-
-    stats_display = gr.Markdown("### 📊 Session Statistics")
 
     refresh_btn = gr.Button("🔄 Refresh All", variant="primary")
 

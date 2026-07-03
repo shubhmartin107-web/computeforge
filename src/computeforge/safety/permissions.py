@@ -16,7 +16,7 @@ class CapabilityRegistry:
     def get(self, name: str) -> Capability | None:
         return self._capabilities.get(name)
 
-    def list(self, category: str | None = None) -> list[Capability]:
+    def list_capabilities(self, category: str | None = None) -> list[Capability]:
         if category:
             return [c for c in self._capabilities.values() if c.category == category]
         return list(self._capabilities.values())
@@ -41,7 +41,9 @@ class CapabilityRegistry:
                 action_type="navigate",
                 risk_level=RiskLevel.MEDIUM,
                 required_permissions=["browser.navigate"],
-                parameters=[ParameterDef(name="url", type="string", description="Target URL", required=True)],
+                parameters=[
+                    ParameterDef(name="url", type="string", description="Target URL", required=True)
+                ],
                 category="browser",
             ),
             Capability(
@@ -51,7 +53,9 @@ class CapabilityRegistry:
                 risk_level=RiskLevel.LOW,
                 required_permissions=["browser.interact"],
                 parameters=[
-                    ParameterDef(name="selector", type="string", description="CSS selector", required=False),
+                    ParameterDef(
+                        name="selector", type="string", description="CSS selector", required=False
+                    ),
                 ],
                 category="browser",
             ),
@@ -62,8 +66,15 @@ class CapabilityRegistry:
                 risk_level=RiskLevel.LOW,
                 required_permissions=["browser.interact"],
                 parameters=[
-                    ParameterDef(name="text", type="string", description="Text to type", required=True),
-                    ParameterDef(name="selector", type="string", description="Target selector", required=False),
+                    ParameterDef(
+                        name="text", type="string", description="Text to type", required=True
+                    ),
+                    ParameterDef(
+                        name="selector",
+                        type="string",
+                        description="Target selector",
+                        required=False,
+                    ),
                 ],
                 category="browser",
             ),
@@ -97,7 +108,11 @@ class CapabilityRegistry:
                 action_type="evaluate",
                 risk_level=RiskLevel.CRITICAL,
                 required_permissions=["browser.evaluate"],
-                parameters=[ParameterDef(name="script", type="string", description="JavaScript code", required=True)],
+                parameters=[
+                    ParameterDef(
+                        name="script", type="string", description="JavaScript code", required=True
+                    )
+                ],
                 category="browser",
             ),
             Capability(
@@ -107,8 +122,12 @@ class CapabilityRegistry:
                 risk_level=RiskLevel.HIGH,
                 required_permissions=["desktop.control"],
                 parameters=[
-                    ParameterDef(name="x", type="integer", description="X coordinate", required=True),
-                    ParameterDef(name="y", type="integer", description="Y coordinate", required=True),
+                    ParameterDef(
+                        name="x", type="integer", description="X coordinate", required=True
+                    ),
+                    ParameterDef(
+                        name="y", type="integer", description="Y coordinate", required=True
+                    ),
                 ],
                 category="desktop",
             ),

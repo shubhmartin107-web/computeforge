@@ -6,6 +6,7 @@ from pydantic_settings import BaseSettings
 
 class BrowserConfig(BaseModel):
     """Browser configuration."""
+
     headless: bool = True
     viewport_width: int = 1280
     viewport_height: int = 720
@@ -17,10 +18,13 @@ class BrowserConfig(BaseModel):
 
 class SafetyConfig(BaseModel):
     """Safety and permission configuration."""
+
     enabled: bool = True
     policy_file: str | None = None
     risk_threshold: str = "high"
-    require_confirmation_for: list[str] = Field(default_factory=lambda: ["navigate", "desktop_click", "type"])
+    require_confirmation_for: list[str] = Field(
+        default_factory=lambda: ["navigate", "desktop_click", "type"]
+    )
     blocklist_domains: list[str] = Field(default_factory=list)
     max_actions_per_session: int = 200
     allow_dangerous_js: bool = False
@@ -28,6 +32,7 @@ class SafetyConfig(BaseModel):
 
 class StorageConfig(BaseModel):
     """Storage configuration."""
+
     database_url: str = "sqlite+aiosqlite:///$HOME/.computeforge/sessions.db"
     screenshot_dir: str = "$HOME/.computeforge/screenshots"
     session_dir: str = "$HOME/.computeforge/sessions"
@@ -37,6 +42,7 @@ class StorageConfig(BaseModel):
 
 class EngineConfig(BaseSettings, BaseModel):
     """Top-level engine configuration."""
+
     browser: BrowserConfig = Field(default_factory=BrowserConfig)
     safety: SafetyConfig = Field(default_factory=SafetyConfig)
     storage: StorageConfig = Field(default_factory=StorageConfig)

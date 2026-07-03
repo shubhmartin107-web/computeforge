@@ -15,7 +15,9 @@ class RiskScorer:
 
     def assess(self, request: ActionRequest) -> tuple[RiskLevel, float, str]:
         """Assess the risk of an action. Returns (risk_level, score, reason)."""
-        action_type_str = request.type.value if hasattr(request.type, "value") else str(request.type)
+        action_type_str = (
+            request.type.value if hasattr(request.type, "value") else str(request.type)
+        )
 
         base_risk = self._registry.get_risk_level(action_type_str)
         score = self._risk_level_to_score(base_risk)
@@ -39,7 +41,10 @@ class RiskScorer:
         if action_type_str in ("desktop_click", "desktop_type", "desktop_keypress"):
             score = max(score, 0.8)
 
-        if request.params.get("selector", "").lower() in ("input[type=\"password\"]", "input[name=\"password\"]"):
+        if request.params.get("selector", "").lower() in (
+            'input[type="password"]',
+            'input[name="password"]',
+        ):
             score = max(score, 0.7)
             reasons.append("Password field detected")
 

@@ -18,6 +18,7 @@ logger = logging.getLogger("computeforge.extensibility.plugin")
 @dataclass
 class PluginManifest:
     """Standardized plugin manifest for marketplace compatibility."""
+
     name: str
     version: str
     description: str
@@ -36,6 +37,7 @@ class PluginManifest:
 @dataclass
 class PluginMeta:
     """Metadata about a loaded plugin."""
+
     name: str
     version: str
     description: str
@@ -52,8 +54,7 @@ class PluginBase(ABC):
     """
 
     @abstractmethod
-    def get_meta(self) -> PluginMeta:
-        ...
+    def get_meta(self) -> PluginMeta: ...
 
     def get_manifest(self) -> PluginManifest | None:
         return None
@@ -150,6 +151,7 @@ class PluginLoader:
         plugin_classes: list[type[PluginBase]] = []
         try:
             from importlib.metadata import entry_points
+
             eps = entry_points(group="computeforge.plugins")
             for ep in eps:
                 try:
@@ -158,7 +160,11 @@ class PluginLoader:
                     if errors:
                         logger.warning(f"Plugin entry point {ep.name} validation failed: {errors}")
                         continue
-                    if inspect.isclass(cls) and issubclass(cls, PluginBase) and cls is not PluginBase:
+                    if (
+                        inspect.isclass(cls)
+                        and issubclass(cls, PluginBase)
+                        and cls is not PluginBase
+                    ):
                         plugin_classes.append(cls)
                         logger.info(f"Discovered plugin via entry point: {ep.name}")
                 except Exception as e:
@@ -183,14 +189,20 @@ class PluginLoader:
                     try:
                         module = importlib.import_module(module_name)
                         for name, obj in inspect.getmembers(module):
-                            if (inspect.isclass(obj) and issubclass(obj, PluginBase)
-                                    and obj is not PluginBase and not inspect.isabstract(obj)):
+                            if (
+                                inspect.isclass(obj)
+                                and issubclass(obj, PluginBase)
+                                and obj is not PluginBase
+                                and not inspect.isabstract(obj)
+                            ):
                                 errors = PluginValidator.validate_class(obj)
                                 if not errors:
                                     plugin_classes.append(obj)
                                     logger.info(f"Discovered plugin from {filename}: {name}")
                                 else:
-                                    logger.warning(f"Plugin {name} in {filename} validation failed: {errors}")  # pragma: no cover
+                                    logger.warning(
+                                        f"Plugin {name} in {filename} validation failed: {errors}"
+                                    )  # pragma: no cover
                     except Exception as e:
                         logger.debug(f"Failed to load plugin module {filename}: {e}")
         finally:
@@ -208,7 +220,10 @@ class PluginLoader:
                 if filename.endswith(".py") and not filename.startswith("_"):
                     module_path = os.path.join(plugin_dir, filename)
                     mtime = os.path.getmtime(module_path)
-                    if module_path in self._watched_files and self._watched_files[module_path] != mtime:
+                    if (
+                        module_path in self._watched_files
+                        and self._watched_files[module_path] != mtime
+                    ):
                         logger.info(f"Detected change in plugin: {filename}")
                         self._watched_files[module_path] = mtime
                         new_classes.extend(self.discover_directory(plugin_dir))

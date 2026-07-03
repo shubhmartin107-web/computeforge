@@ -28,13 +28,15 @@ def create_monitor_tab(storage: StorageBackend, run_async: Callable) -> None:
                 return [], "No active sessions"
             rows = []
             for s in sessions:
-                rows.append([
-                    s.id[:8] + "...",
-                    format_status(s.status.value),
-                    str(s.action_count),
-                    s.started_at.strftime("%H:%M:%S") if s.started_at else "-",
-                    s.config.base_url or "-",
-                ])
+                rows.append(
+                    [
+                        s.id[:8] + "...",
+                        format_status(s.status.value),
+                        str(s.action_count),
+                        s.started_at.strftime("%H:%M:%S") if s.started_at else "-",
+                        s.config.base_url or "-",
+                    ]
+                )
             return rows, f"{len(sessions)} session(s) loaded"
         except Exception as e:
             return [], f"Error: {e}"
@@ -62,7 +64,7 @@ def create_monitor_tab(storage: StorageBackend, run_async: Callable) -> None:
                     )
             return "Not found", "", "", "", ""
         except Exception as e:
-            return f"Error: {e}", "", "", ""
+            return f"Error: {e}", "", "", "", ""
 
     with gr.Row():
         with gr.Column(scale=1):
@@ -94,7 +96,13 @@ def create_monitor_tab(storage: StorageBackend, run_async: Callable) -> None:
     session_input.submit(
         fn=view_session_details,
         inputs=[session_input, gr.State({})],
-        outputs=[session_id_display, session_status, session_summary, recent_actions, session_config],
+        outputs=[
+            session_id_display,
+            session_status,
+            session_summary,
+            recent_actions,
+            session_config,
+        ],
     )
 
     refresh_btn.click(

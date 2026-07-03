@@ -74,11 +74,15 @@ class SessionRecorder:
         await self._storage.save_session(session)
         self._current_session = session
         self._start_time = time.time()
-        await self._storage.save_event(session.id, "session_created", {
-            "session_id": session.id,
-            "config": session.config.model_dump(),
-            "timestamp": datetime.utcnow().isoformat(),
-        })
+        await self._storage.save_event(
+            session.id,
+            "session_created",
+            {
+                "session_id": session.id,
+                "config": session.config.model_dump(),
+                "timestamp": datetime.utcnow().isoformat(),
+            },
+        )
 
     async def record_session_update(self, session: Session) -> None:
         await self._storage.save_session(session)
@@ -88,14 +92,18 @@ class SessionRecorder:
     async def record_session_end(self, session: Session) -> None:
         await self._storage.save_session(session)
         await self.flush()
-        await self._storage.save_event(session.id, "session_ended", {
-            "session_id": session.id,
-            "status": session.status.value,
-            "action_count": session.action_count,
-            "duration_seconds": time.time() - self._start_time,
-            "error": session.error,
-            "timestamp": datetime.utcnow().isoformat(),
-        })
+        await self._storage.save_event(
+            session.id,
+            "session_ended",
+            {
+                "session_id": session.id,
+                "status": session.status.value,
+                "action_count": session.action_count,
+                "duration_seconds": time.time() - self._start_time,
+                "error": session.error,
+                "timestamp": datetime.utcnow().isoformat(),
+            },
+        )
 
     # ─── Action Recording ─────────────────────────────────────────────
 
@@ -146,7 +154,7 @@ class SessionRecorder:
                     await observer(record, result)
                 else:
                     observer(record, result)
-            except Exception:
+            except Exception:  # nosec
                 pass
 
         # Save event for live streaming
@@ -181,7 +189,9 @@ class SessionRecorder:
 
     # ─── Batch Operations ──────────────────────────────────────────────
 
-    async def record_actions_batch(self, records: list[tuple[ActionRequest, ActionResult]]) -> list[ActionRecord]:
+    async def record_actions_batch(
+        self, records: list[tuple[ActionRequest, ActionResult]]
+    ) -> list[ActionRecord]:
         recorded = []
         for request, result in records:
             record = await self.record_action(request, result=result)
@@ -191,7 +201,9 @@ class SessionRecorder:
 
     # ─── Annotation ────────────────────────────────────────────────────
 
-    async def add_annotation(self, content: str, action_id: str | None = None, atype: str = "note") -> str | None:
+    async def add_annotation(
+        self, content: str, action_id: str | None = None, atype: str = "note"
+    ) -> str | None:
         if self._current_session:
             return await self._storage.add_annotation(
                 self._current_session.id, content, action_id, atype

@@ -10,6 +10,7 @@ from playwright.async_api import (
     Browser,
     BrowserContext,
     Page,
+    Playwright,
     async_playwright,
 )
 from playwright.async_api import (
@@ -48,10 +49,7 @@ USER_AGENTS: dict[str, str] = {
         "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
         "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
     ),
-    "firefox": (
-        "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) "
-        "Gecko/20100101 Firefox/128.0"
-    ),
+    "firefox": ("Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0"),
     "webkit": (
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
         "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
@@ -89,7 +87,7 @@ class BrowserManager:
         self._slow_mo = slow_mo
         self._custom_user_agent = user_agent
 
-        self._playwright: async_playwright | None = None
+        self._playwright: Playwright | None = None
         self._browser: Browser | None = None
         self._context: BrowserContext | None = None
         self._page: Page | None = None
@@ -134,7 +132,9 @@ class BrowserManager:
         for attempt in range(3):
             try:
                 self._playwright = await async_playwright().start()
-                pw_browser_type: PW_BrowserType = getattr(self._playwright, self._browser_type.value)
+                pw_browser_type: PW_BrowserType = getattr(
+                    self._playwright, self._browser_type.value
+                )
                 self._browser = await pw_browser_type.launch(
                     headless=self._headless,
                     args=BROWSER_ARGS.get(self._browser_type.value, []),
@@ -142,7 +142,7 @@ class BrowserManager:
                 )
                 user_agent = self._custom_user_agent or USER_AGENTS.get(self._browser_type.value)
                 self._context = await self._browser.new_context(
-                    viewport=self._viewport,
+                    viewport=self._viewport,  # type: ignore[arg-type]
                     locale=self._locale,
                     timezone_id="America/New_York",
                     user_agent=user_agent,
@@ -160,13 +160,15 @@ class BrowserManager:
                 self._page.on("response", self._on_response)
                 self._page.on("pageerror", self._on_page_error)
 
-                logger.info(f"Browser started: {self._browser_type.value} (headless={self._headless})")
+                logger.info(
+                    f"Browser started: {self._browser_type.value} (headless={self._headless})"
+                )
                 return
             except Exception as e:
                 last_error = e
                 logger.warning(f"Browser launch attempt {attempt + 1}/3 failed: {e}")
                 await self._cleanup()
-                await asyncio.sleep(2 ** attempt)
+                await asyncio.sleep(2**attempt)
 
         raise BrowserError(f"Failed to start browser after 3 attempts: {last_error}")
 
@@ -230,27 +232,49 @@ class BrowserManager:
                 },
             )
         except Exception as e:
-            raise ActionFailed("navigate", str(e), e)
+            raise ActionFailed("navigate", str(e), e) from e
 
     # ─── Page Interaction ─────────────────────────────────────────────
 
-    async def click(self, selector: str | None = None, strategy: str = "css", **kwargs) -> ActionResult:
+    async def click(
+        self, selector: str | None = None, strategy: str = "css", **kwargs
+    ) -> ActionResult:
         """Click an element with multiple fallback strategies."""
         try:
             element = await self._resolve_element(selector, strategy)
             if element is None:
                 raise ElementNotFound(selector or "", strategy, await self.page.content())
             await element.click(
-                **{k: v for k, v in kwargs.items() if k in ("button", "click_count", "delay", "force", "no_wait_after", "position", "modifiers", "trial")}
+                **{
+                    k: v
+                    for k, v in kwargs.items()
+                    if k
+                    in (
+                        "button",
+                        "click_count",
+                        "delay",
+                        "force",
+                        "no_wait_after",
+                        "position",
+                        "modifiers",
+                        "trial",
+                    )
+                }
             )
             self._metrics["actions_executed"] += 1
-            return ActionResult(success=True, action_type=ActionType.CLICK, data={"selector": selector, "strategy": strategy})
+            return ActionResult(
+                success=True,
+                action_type=ActionType.CLICK,
+                data={"selector": selector, "strategy": strategy},
+            )
         except ElementNotFound:
             raise
         except Exception as e:
-            raise ActionFailed("click", str(e), e)
+            raise ActionFailed("click", str(e), e) from e
 
-    async def type_text(self, text: str, selector: str | None = None, strategy: str = "css", **kwargs) -> ActionResult:
+    async def type_text(
+        self, text: str, selector: str | None = None, strategy: str = "css", **kwargs
+    ) -> ActionResult:
         """Type text with smart delay and element finding."""
         try:
             delay = kwargs.get("delay", 10)
@@ -263,11 +287,15 @@ class BrowserManager:
             else:
                 await self.page.keyboard.type(text, delay=delay)
             self._metrics["actions_executed"] += 1
-            return ActionResult(success=True, action_type=ActionType.TYPE, data={"text_length": len(text), "selector": selector})
+            return ActionResult(
+                success=True,
+                action_type=ActionType.TYPE,
+                data={"text_length": len(text), "selector": selector},
+            )
         except ElementNotFound:
             raise
         except Exception as e:
-            raise ActionFailed("type", str(e), e)
+            raise ActionFailed("type", str(e), e) from e
 
     async def scroll(self, delta_x: float = 0, delta_y: float = 300, **kwargs) -> ActionResult:
         """Scroll the page or a specific element."""
@@ -277,11 +305,20 @@ class BrowserManager:
             if selector:
                 element = await self._resolve_element(selector, kwargs.get("strategy", "css"))
                 if element:
-                    await element.evaluate("(args) => el.scrollBy({left: args[0], top: args[1], behavior: args[2]})", [delta_x, delta_y, behavior])
+                    await element.evaluate(
+                        "(args) => el.scrollBy({left: args[0], top: args[1], behavior: args[2]})",
+                        [delta_x, delta_y, behavior],
+                    )
                 else:
-                    await self.page.evaluate("(args) => window.scrollBy({left: args[0], top: args[1], behavior: args[2]})", [delta_x, delta_y, behavior])
+                    await self.page.evaluate(
+                        "(args) => window.scrollBy({left: args[0], top: args[1], behavior: args[2]})",
+                        [delta_x, delta_y, behavior],
+                    )
             else:
-                await self.page.evaluate("(args) => window.scrollBy({left: args[0], top: args[1], behavior: args[2]})", [delta_x, delta_y, behavior])
+                await self.page.evaluate(
+                    "(args) => window.scrollBy({left: args[0], top: args[1], behavior: args[2]})",
+                    [delta_x, delta_y, behavior],
+                )
             self._metrics["actions_executed"] += 1
             return ActionResult(
                 success=True,
@@ -289,9 +326,11 @@ class BrowserManager:
                 data={"delta_x": delta_x, "delta_y": delta_y, "behavior": behavior},
             )
         except Exception as e:
-            raise ActionFailed("scroll", str(e), e)
+            raise ActionFailed("scroll", str(e), e) from e
 
-    async def screenshot(self, path: str | None = None, full_page: bool = False, **kwargs) -> ActionResult:
+    async def screenshot(
+        self, path: str | None = None, full_page: bool = False, **kwargs
+    ) -> ActionResult:
         """Take a screenshot with optional full-page capture."""
         try:
             quality = kwargs.get("quality", 80)
@@ -313,7 +352,7 @@ class BrowserManager:
                 },
             )
         except Exception as e:
-            raise ActionFailed("screenshot", str(e), e)
+            raise ActionFailed("screenshot", str(e), e) from e
 
     # ─── Content Extraction ───────────────────────────────────────────
 
@@ -324,7 +363,9 @@ class BrowserManager:
             if selector:
                 element = await self._resolve_element(selector, kwargs.get("strategy", "css"))
                 if element is None:
-                    raise ElementNotFound(selector, kwargs.get("strategy", "css"), await self.page.content())
+                    raise ElementNotFound(
+                        selector, kwargs.get("strategy", "css"), await self.page.content()
+                    )
                 text = await element.inner_text()
             else:
                 text = await self.page.inner_text("body")
@@ -339,7 +380,7 @@ class BrowserManager:
         except ElementNotFound:
             raise
         except Exception as e:
-            raise ActionFailed("extract_text", str(e), e)
+            raise ActionFailed("extract_text", str(e), e) from e
 
     async def extract_html(self, selector: str | None = None, **kwargs) -> ActionResult:
         """Extract HTML with optional pretty-printing."""
@@ -348,7 +389,9 @@ class BrowserManager:
             if selector:
                 element = await self._resolve_element(selector, kwargs.get("strategy", "css"))
                 if element is None:
-                    raise ElementNotFound(selector, kwargs.get("strategy", "css"), await self.page.content())
+                    raise ElementNotFound(
+                        selector, kwargs.get("strategy", "css"), await self.page.content()
+                    )
                 if pretty:
                     html = await element.evaluate("el => el.outerHTML")
                 else:
@@ -364,7 +407,7 @@ class BrowserManager:
         except ElementNotFound:
             raise
         except Exception as e:
-            raise ActionFailed("extract_html", str(e), e)
+            raise ActionFailed("extract_html", str(e), e) from e
 
     async def evaluate(self, script: str, **kwargs) -> ActionResult:
         """Execute JavaScript with sandbox warning."""
@@ -375,14 +418,18 @@ class BrowserManager:
             else:
                 result = await self.page.evaluate(script)
             self._metrics["actions_executed"] += 1
-            return ActionResult(success=True, action_type=ActionType.EVALUATE, data={"result": result})
+            return ActionResult(
+                success=True, action_type=ActionType.EVALUATE, data={"result": result}
+            )
         except Exception as e:
-            raise ActionFailed("evaluate", str(e), e)
+            raise ActionFailed("evaluate", str(e), e) from e
 
     # ─── Page Information ─────────────────────────────────────────────
 
     async def get_url(self) -> ActionResult:
-        return ActionResult(success=True, action_type=ActionType.GET_URL, data={"url": self.page.url})
+        return ActionResult(
+            success=True, action_type=ActionType.GET_URL, data={"url": self.page.url}
+        )
 
     async def get_title(self) -> ActionResult:
         title = await self.page.title()
@@ -390,30 +437,42 @@ class BrowserManager:
 
     async def wait(self, timeout_ms: int = 1000) -> ActionResult:
         await asyncio.sleep(timeout_ms / 1000.0)
-        return ActionResult(success=True, action_type=ActionType.WAIT, data={"timeout_ms": timeout_ms})
+        return ActionResult(
+            success=True, action_type=ActionType.WAIT, data={"timeout_ms": timeout_ms}
+        )
 
     # ─── Advanced Features ────────────────────────────────────────────
 
     async def go_back(self) -> ActionResult:
         try:
             response = await self.page.go_back()
-            return ActionResult(success=True, action_type=ActionType.GO_BACK, data={"url": self.page.url, "status": response.status if response else None})
+            return ActionResult(
+                success=True,
+                action_type=ActionType.GO_BACK,
+                data={"url": self.page.url, "status": response.status if response else None},
+            )
         except Exception as e:
-            raise ActionFailed("go_back", str(e), e)
+            raise ActionFailed("go_back", str(e), e) from e
 
     async def go_forward(self) -> ActionResult:
         try:
             response = await self.page.go_forward()
-            return ActionResult(success=True, action_type=ActionType.GO_FORWARD, data={"url": self.page.url, "status": response.status if response else None})
+            return ActionResult(
+                success=True,
+                action_type=ActionType.GO_FORWARD,
+                data={"url": self.page.url, "status": response.status if response else None},
+            )
         except Exception as e:
-            raise ActionFailed("go_forward", str(e), e)
+            raise ActionFailed("go_forward", str(e), e) from e
 
     async def refresh(self) -> ActionResult:
         try:
             await self.page.reload()
-            return ActionResult(success=True, action_type=ActionType.REFRESH, data={"url": self.page.url})
+            return ActionResult(
+                success=True, action_type=ActionType.REFRESH, data={"url": self.page.url}
+            )
         except Exception as e:
-            raise ActionFailed("refresh", str(e), e)
+            raise ActionFailed("refresh", str(e), e) from e
 
     async def hover(self, selector: str, strategy: str = "css", **kwargs) -> ActionResult:
         try:
@@ -421,46 +480,60 @@ class BrowserManager:
             if element is None:
                 raise ElementNotFound(selector, strategy, await self.page.content())
             await element.hover(**kwargs)
-            return ActionResult(success=True, action_type=ActionType.HOVER, data={"selector": selector})
+            return ActionResult(
+                success=True, action_type=ActionType.HOVER, data={"selector": selector}
+            )
         except ElementNotFound:
             raise
         except Exception as e:
-            raise ActionFailed("hover", str(e), e)
+            raise ActionFailed("hover", str(e), e) from e
 
     async def press_key(self, key: str, **kwargs) -> ActionResult:
         try:
             await self.page.keyboard.press(key, **kwargs)
             return ActionResult(success=True, action_type=ActionType.PRESS_KEY, data={"key": key})
         except Exception as e:
-            raise ActionFailed("press_key", str(e), e)
+            raise ActionFailed("press_key", str(e), e) from e
 
-    async def select_option(self, selector: str, value: str | list[str], strategy: str = "css") -> ActionResult:
+    async def select_option(
+        self, selector: str, value: str | list[str], strategy: str = "css"
+    ) -> ActionResult:
         try:
             element = await self._resolve_element(selector, strategy)
             if element is None:
                 raise ElementNotFound(selector, strategy, await self.page.content())
             values = value if isinstance(value, list) else [value]
             await element.select_option(values)
-            return ActionResult(success=True, action_type=ActionType.SELECT_OPTION, data={"selector": selector, "value": value})
+            return ActionResult(
+                success=True,
+                action_type=ActionType.SELECT_OPTION,
+                data={"selector": selector, "value": value},
+            )
         except ElementNotFound:
             raise
         except Exception as e:
-            raise ActionFailed("select_option", str(e), e)
+            raise ActionFailed("select_option", str(e), e) from e
 
     async def set_viewport(self, width: int, height: int) -> ActionResult:
         try:
             await self.page.set_viewport_size({"width": width, "height": height})
             self._viewport = {"width": width, "height": height}
-            return ActionResult(success=True, action_type=ActionType.SET_VIEWPORT, data={"width": width, "height": height})
+            return ActionResult(
+                success=True,
+                action_type=ActionType.SET_VIEWPORT,
+                data={"width": width, "height": height},
+            )
         except Exception as e:
-            raise ActionFailed("set_viewport", str(e), e)
+            raise ActionFailed("set_viewport", str(e), e) from e
 
     async def inject_css(self, css: str) -> ActionResult:
         try:
             await self.page.add_style_tag(content=css)
-            return ActionResult(success=True, action_type=ActionType.INJECT_CSS, data={"css_length": len(css)})
+            return ActionResult(
+                success=True, action_type=ActionType.INJECT_CSS, data={"css_length": len(css)}
+            )
         except Exception as e:
-            raise ActionFailed("inject_css", str(e), e)
+            raise ActionFailed("inject_css", str(e), e) from e
 
     # ─── Network ──────────────────────────────────────────────────────
 
@@ -468,23 +541,27 @@ class BrowserManager:
         try:
             timeout = timeout_ms or self._timeout_ms
             await self.page.wait_for_load_state("networkidle", timeout=timeout)
-            return ActionResult(success=True, action_type=ActionType.WAIT, data={"event": "networkidle"})
+            return ActionResult(
+                success=True, action_type=ActionType.WAIT, data={"event": "networkidle"}
+            )
         except Exception as e:
-            raise ActionFailed("wait_for_navigation", str(e), e)
+            raise ActionFailed("wait_for_navigation", str(e), e) from e
 
     async def get_cookies(self) -> ActionResult:
         try:
             cookies = await self.context.cookies()
-            return ActionResult(success=True, action_type=ActionType.GET_COOKIES, data={"cookies": cookies})
+            return ActionResult(
+                success=True, action_type=ActionType.GET_COOKIES, data={"cookies": cookies}
+            )
         except Exception as e:
-            raise ActionFailed("get_cookies", str(e), e)
+            raise ActionFailed("get_cookies", str(e), e) from e
 
     async def clear_cookies(self) -> ActionResult:
         try:
             await self.context.clear_cookies()
             return ActionResult(success=True, action_type=ActionType.CLEAR_COOKIES, data={})
         except Exception as e:
-            raise ActionFailed("clear_cookies", str(e), e)
+            raise ActionFailed("clear_cookies", str(e), e) from e
 
     # ─── Element Resolution ──────────────────────────────────────────
 

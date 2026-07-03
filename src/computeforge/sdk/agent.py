@@ -103,7 +103,7 @@ class Agent:
         await self._engine.create_session(self._session_config)
         await self._engine.start_session()
 
-        summary = {
+        summary: dict[str, Any] = {
             "task": task,
             "actions_taken": 0,
             "success": False,
@@ -111,13 +111,15 @@ class Agent:
         }
 
         try:
-            for iteration in range(self._max_iterations):
+            for _iteration in range(self._max_iterations):
                 if not self._engine.is_running:
                     break
 
                 # Get current state
                 screenshot_result = await self._engine.screenshot()
-                screenshot_bytes = screenshot_result.data.get("image") if screenshot_result.success else None
+                screenshot_bytes = (
+                    screenshot_result.data.get("image") if screenshot_result.success else None
+                )
                 text_result = await self._engine.extract_text()
                 page_text = text_result.data.get("text", "") if text_result.success else ""
 
@@ -142,21 +144,25 @@ class Agent:
                     atype = ActionType(atype_str)
                     result = await self._engine.execute(atype, **params)
 
-                    self._action_history.append({
-                        "type": atype_str,
-                        "params": params,
-                        "success": result.success,
-                        "duration_ms": result.duration_ms,
-                    })
+                    self._action_history.append(
+                        {
+                            "type": atype_str,
+                            "params": params,
+                            "success": result.success,
+                            "duration_ms": result.duration_ms,
+                        }
+                    )
                     summary["actions_taken"] += 1
 
                 except Exception as e:
-                    self._action_history.append({
-                        "type": atype_str,
-                        "params": params,
-                        "success": False,
-                        "error": str(e),
-                    })
+                    self._action_history.append(
+                        {
+                            "type": atype_str,
+                            "params": params,
+                            "success": False,
+                            "error": str(e),
+                        }
+                    )
                     summary["actions_taken"] += 1
 
             if summary["actions_taken"] >= self._max_iterations:

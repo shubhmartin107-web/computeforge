@@ -6,7 +6,7 @@ from computeforge.safety.permissions import CapabilityRegistry
 
 def test_capability_registry_builtins():
     registry = CapabilityRegistry()
-    caps = registry.list()
+    caps = registry.list_capabilities()
     assert len(caps) >= 10
     names = [c.name for c in caps]
     assert "browser.navigate" in names
@@ -51,7 +51,7 @@ def test_capability_get_nonexistent():
 
 def test_capability_list_by_category():
     registry = CapabilityRegistry()
-    desktop_caps = registry.list(category="desktop")
+    desktop_caps = registry.list_capabilities(category="desktop")
     assert all(c.category == "desktop" for c in desktop_caps)
     assert len(desktop_caps) >= 4
 

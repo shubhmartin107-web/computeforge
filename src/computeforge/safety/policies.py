@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+import enum
 import logging
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from enum import Enum
 from pathlib import Path
 from typing import Any
 
@@ -17,7 +17,7 @@ from computeforge.safety.risk import RiskScorer
 logger = logging.getLogger("computeforge.safety.policies")
 
 
-class PolicyDecision(str, Enum):
+class PolicyDecision(enum.StrEnum):
     ALLOW = "allow"
     DENY = "deny"
     REQUIRE_CONFIRMATION = "require_confirmation"
@@ -27,6 +27,7 @@ class PolicyDecision(str, Enum):
 @dataclass
 class DomainRule:
     """Rule for a specific domain pattern."""
+
     pattern: str = "*"
     allow: bool = True
     max_actions: int = 0
@@ -37,6 +38,7 @@ class DomainRule:
 @dataclass
 class RateLimitRule:
     """Rate limiting configuration."""
+
     max_actions_per_minute: int = 30
     max_actions_per_session: int = 200
     cooldown_seconds: int = 0
@@ -45,6 +47,7 @@ class RateLimitRule:
 @dataclass
 class PolicyRule:
     """A single policy rule with full context."""
+
     action_type: str = "*"
     risk_threshold: str = "high"
     decision: PolicyDecision = PolicyDecision.ALLOW
@@ -56,6 +59,7 @@ class PolicyRule:
 @dataclass
 class Policy:
     """A comprehensive named policy."""
+
     name: str = "default"
     description: str = ""
     version: str = "1.0"
@@ -143,16 +147,56 @@ class PolicyEngine:
             description="Default safety policy for ComputeForge",
             version="1.0",
             rules=[
-                PolicyRule(action_type="evaluate", risk_threshold="medium", decision=PolicyDecision.DENY, priority=100, reasons=["JavaScript execution restricted by default policy"]),
-                PolicyRule(action_type="desktop_click", risk_threshold="medium", decision=PolicyDecision.REQUIRE_CONFIRMATION, priority=90, reasons=["Desktop clicks require human confirmation"]),
-                PolicyRule(action_type="desktop_type", risk_threshold="medium", decision=PolicyDecision.REQUIRE_CONFIRMATION, priority=90, reasons=["Desktop typing requires human confirmation"]),
-                PolicyRule(action_type="desktop_keypress", risk_threshold="medium", decision=PolicyDecision.REQUIRE_CONFIRMATION, priority=90, reasons=["Desktop keypress requires human confirmation"]),
-                PolicyRule(action_type="desktop_screenshot", risk_threshold="high", decision=PolicyDecision.REQUIRE_CONFIRMATION, priority=80, reasons=["Desktop screenshots may capture sensitive information"]),
-                PolicyRule(action_type="navigate", risk_threshold="critical", decision=PolicyDecision.DENY, priority=70, reasons=["Navigation to critical-risk URLs blocked"]),
+                PolicyRule(
+                    action_type="evaluate",
+                    risk_threshold="medium",
+                    decision=PolicyDecision.DENY,
+                    priority=100,
+                    reasons=["JavaScript execution restricted by default policy"],
+                ),
+                PolicyRule(
+                    action_type="desktop_click",
+                    risk_threshold="medium",
+                    decision=PolicyDecision.REQUIRE_CONFIRMATION,
+                    priority=90,
+                    reasons=["Desktop clicks require human confirmation"],
+                ),
+                PolicyRule(
+                    action_type="desktop_type",
+                    risk_threshold="medium",
+                    decision=PolicyDecision.REQUIRE_CONFIRMATION,
+                    priority=90,
+                    reasons=["Desktop typing requires human confirmation"],
+                ),
+                PolicyRule(
+                    action_type="desktop_keypress",
+                    risk_threshold="medium",
+                    decision=PolicyDecision.REQUIRE_CONFIRMATION,
+                    priority=90,
+                    reasons=["Desktop keypress requires human confirmation"],
+                ),
+                PolicyRule(
+                    action_type="desktop_screenshot",
+                    risk_threshold="high",
+                    decision=PolicyDecision.REQUIRE_CONFIRMATION,
+                    priority=80,
+                    reasons=["Desktop screenshots may capture sensitive information"],
+                ),
+                PolicyRule(
+                    action_type="navigate",
+                    risk_threshold="critical",
+                    decision=PolicyDecision.DENY,
+                    priority=70,
+                    reasons=["Navigation to critical-risk URLs blocked"],
+                ),
             ],
             domain_rules=[
-                DomainRule(pattern="*.gov", allow=False, reasons=["Government sites blocked by default"]),
-                DomainRule(pattern="*.mil", allow=False, reasons=["Military sites blocked by default"]),
+                DomainRule(
+                    pattern="*.gov", allow=False, reasons=["Government sites blocked by default"]
+                ),
+                DomainRule(
+                    pattern="*.mil", allow=False, reasons=["Military sites blocked by default"]
+                ),
             ],
             rate_limit=RateLimitRule(max_actions_per_minute=30, max_actions_per_session=200),
         )
@@ -193,12 +237,16 @@ class PolicyEngine:
                 version=policy_data.get("version", "1.0"),
                 rules=rules,
                 domain_rules=[DomainRule(**dr) for dr in policy_data.get("domain_rules", [])],
-                rate_limit=RateLimitRule(**policy_data.get("rate_limit", {})) if policy_data.get("rate_limit") else None,
+                rate_limit=RateLimitRule(**policy_data.get("rate_limit", {}))
+                if policy_data.get("rate_limit")
+                else None,
                 default_decision=PolicyDecision(policy_data.get("default_decision", "allow")),
                 enabled=policy_data.get("enabled", True),
             )
             self._policies[policy.name] = policy
-            logger.info(f"Loaded policy: {policy.name} v{policy.version} ({len(policy.rules)} rules)")
+            logger.info(
+                f"Loaded policy: {policy.name} v{policy.version} ({len(policy.rules)} rules)"
+            )
 
     def add_policy(self, policy: Policy) -> None:
         self._policies[policy.name] = policy
@@ -222,7 +270,9 @@ class PolicyEngine:
 
     def evaluate(self, request: ActionRequest, session_id: str | None = None) -> PolicyDecision:
         """Evaluate an action against all policies with full context."""
-        action_type_str = request.type.value if hasattr(request.type, "value") else str(request.type)
+        action_type_str = (
+            request.type.value if hasattr(request.type, "value") else str(request.type)
+        )
         _, risk_score, risk_reason = self._risk_scorer.assess(request)
 
         url = request.params.get("url", "")
@@ -239,15 +289,39 @@ class PolicyEngine:
                 for dr in policy.domain_rules:
                     if self._domain_matches(dr.pattern, domain):
                         if not dr.allow:
-                            decisions.append((PolicyDecision.DENY, 200, f"Domain blocked by policy: {dr.pattern}"))
+                            decisions.append(
+                                (
+                                    PolicyDecision.DENY,
+                                    200,
+                                    f"Domain blocked by policy: {dr.pattern}",
+                                )
+                            )
                         if dr.max_actions > 0:
                             domain_key = f"{session_id}:{domain}" if session_id else domain
                             count = getattr(self, "_domain_counts", {}).get(domain_key, 0)
                             if count >= dr.max_actions:
-                                decisions.append((PolicyDecision.DENY, 190, f"Domain action limit exceeded: {domain}"))
-                            self._domain_counts = {**getattr(self, "_domain_counts", {}), domain_key: count + 1}
-                        if dr.require_confirmation_for and action_type_str in dr.require_confirmation_for:
-                            decisions.append((PolicyDecision.REQUIRE_CONFIRMATION, 150, f"Domain requires confirmation for {action_type_str}"))
+                                decisions.append(
+                                    (
+                                        PolicyDecision.DENY,
+                                        190,
+                                        f"Domain action limit exceeded: {domain}",
+                                    )
+                                )
+                            self._domain_counts = {
+                                **getattr(self, "_domain_counts", {}),
+                                domain_key: count + 1,
+                            }
+                        if (
+                            dr.require_confirmation_for
+                            and action_type_str in dr.require_confirmation_for
+                        ):
+                            decisions.append(
+                                (
+                                    PolicyDecision.REQUIRE_CONFIRMATION,
+                                    150,
+                                    f"Domain requires confirmation for {action_type_str}",
+                                )
+                            )
 
             # Check rate limits
             if session_id and policy.rate_limit:
@@ -276,15 +350,22 @@ class PolicyEngine:
     def check(self, request: ActionRequest, session_id: str | None = None) -> None:
         """Check if an action is allowed; raises SafetyBlocked if not."""
         decision = self.evaluate(request, session_id)
-        action_type_str = request.type.value if hasattr(request.type, "value") else str(request.type)
+        action_type_str = (
+            request.type.value if hasattr(request.type, "value") else str(request.type)
+        )
         self._audit(action_type_str, request.params, decision.value, session_id)
 
         if decision == PolicyDecision.DENY:
-            raise SafetyBlocked(action_type=action_type_str, reason="Blocked by safety policy", policy="default")
+            raise SafetyBlocked(
+                action_type=action_type_str, reason="Blocked by safety policy", policy="default"
+            )
 
-        if decision == PolicyDecision.REQUIRE_CONFIRMATION:
-            if not self._confirm_action(request):
-                raise SafetyBlocked(action_type=action_type_str, reason="Action requires human confirmation", policy="default")
+        if decision == PolicyDecision.REQUIRE_CONFIRMATION and not self._confirm_action(request):
+            raise SafetyBlocked(
+                action_type=action_type_str,
+                reason="Action requires human confirmation",
+                policy="default",
+            )
 
         if session_id:
             self._rate_limiter.record_action(session_id)
@@ -292,7 +373,12 @@ class PolicyEngine:
     def _confirm_action(self, request: ActionRequest) -> bool:
         """Prompt for human confirmation of an action."""
         import sys
-        action_str = f"{request.type.value}({request.params})" if hasattr(request.type, "value") else str(request)
+
+        action_str = (
+            f"{request.type.value}({request.params})"
+            if hasattr(request.type, "value")
+            else str(request)
+        )
         print(f"\n⚠️  ACTION REQUIRES CONFIRMATION: {action_str}")
         print("    Allow this action? [y/N] ", end="", flush=True)
         try:
@@ -301,8 +387,12 @@ class PolicyEngine:
         except (EOFError, KeyboardInterrupt):
             return False
 
-    def get_decision_for_action(self, request: ActionRequest, session_id: str | None = None) -> dict[str, Any]:
-        action_type_str = request.type.value if hasattr(request.type, "value") else str(request.type)
+    def get_decision_for_action(
+        self, request: ActionRequest, session_id: str | None = None
+    ) -> dict[str, Any]:
+        action_type_str = (
+            request.type.value if hasattr(request.type, "value") else str(request.type)
+        )
         risk_level, risk_score, risk_reason = self._risk_scorer.assess(request)
         decision = self.evaluate(request, session_id)
 
@@ -318,7 +408,9 @@ class PolicyEngine:
 
     # ─── Audit ────────────────────────────────────────────────────────
 
-    def _audit(self, action_type: str, params: dict[str, Any], decision: str, session_id: str | None = None) -> None:
+    def _audit(
+        self, action_type: str, params: dict[str, Any], decision: str, session_id: str | None = None
+    ) -> None:
         entry = {
             "timestamp": datetime.utcnow().isoformat(),
             "action_type": action_type,
@@ -328,7 +420,7 @@ class PolicyEngine:
         }
         self._audit_log.append(entry)
         if len(self._audit_log) > self._max_audit_entries:
-            self._audit_log = self._audit_log[-self._max_audit_entries:]
+            self._audit_log = self._audit_log[-self._max_audit_entries :]
 
     def get_audit_log(self, limit: int = 100) -> list[dict[str, Any]]:
         return self._audit_log[-limit:]

@@ -15,7 +15,9 @@ console = Console()
 def run_command(
     url: str = typer.Argument(..., help="URL to navigate to"),
     headless: bool = typer.Option(True, "--headless", help="Run browser in headless mode"),
-    visible: bool = typer.Option(False, "--visible", help="Show browser window (overrides --headless)"),
+    visible: bool = typer.Option(
+        False, "--visible", help="Show browser window (overrides --headless)"
+    ),
     output: str | None = typer.Option(None, "--output", "-o", help="Output file for session data"),
     max_actions: int = typer.Option(10, "--max-actions", "-n", help="Maximum actions to execute"),
 ):

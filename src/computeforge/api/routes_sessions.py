@@ -24,7 +24,7 @@ def _cleanup_stale_engines() -> None:
         _engines.pop(sid, None)
     if len(_engines) > _MAX_ENGINES:
         sorted_engines = sorted(_engines.items(), key=lambda x: x[1].session.created_at or "")
-        for sid, _ in sorted_engines[:len(_engines) - _MAX_ENGINES]:
+        for sid, _ in sorted_engines[: len(_engines) - _MAX_ENGINES]:
             _engines.pop(sid, None)
 
 
@@ -47,7 +47,9 @@ async def list_sessions():
                 "id": e.session.id,
                 "status": e.session.status.value if e.session else "unknown",
                 "action_count": e.session.action_count if e.session else 0,
-                "created_at": e.session.created_at.isoformat() if e.session and e.session.created_at else None,
+                "created_at": e.session.created_at.isoformat()
+                if e.session and e.session.created_at
+                else None,
                 "state": e.state.value if hasattr(e, "state") else "unknown",
             }
             for e in _engines.values()
@@ -71,7 +73,7 @@ async def start_session(session_id: str):
         session = await engine.start_session()
         return {"status": "started", "session_id": session.id}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/{session_id}/stop", summary="Stop a session")
@@ -114,6 +116,7 @@ async def get_session_actions(
 ):
     """Get actions for a session from persistent storage."""
     from computeforge.observability.storage import StorageBackend
+
     storage = StorageBackend()
     try:
         await storage.connect()
@@ -126,7 +129,7 @@ async def get_session_actions(
             "offset": offset,
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
     finally:
         await storage.close()
 
@@ -135,12 +138,13 @@ async def get_session_actions(
 async def annotate_session(session_id: str, content: str, action_id: str | None = None):
     """Add an annotation to a session."""
     from computeforge.observability.storage import StorageBackend
+
     storage = StorageBackend()
     try:
         await storage.connect()
         aid = await storage.add_annotation(session_id, content, action_id)
         return {"status": "ok", "annotation_id": aid}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
     finally:
         await storage.close()

@@ -106,14 +106,18 @@ def version_command():
     """Show detailed version information."""
     console.print(f"[bold]ComputeForge[/bold] v{__version__}")
     console.print(f"[dim]Python: {__import__('sys').version}")
-    console.print(f"[dim]Playwright: {__import__('playwright').__version__ if hasattr(__import__('playwright'), '__version__') else 'installed'}")
+    console.print(
+        f"[dim]Playwright: {__import__('playwright').__version__ if hasattr(__import__('playwright'), '__version__') else 'installed'}"
+    )
     try:
         import gradio
+
         console.print(f"[dim]Gradio: {gradio.__version__}")
     except ImportError:
         pass
     try:
         import fastapi
+
         console.print(f"[dim]FastAPI: {fastapi.__version__}")
     except ImportError:
         pass
@@ -128,23 +132,25 @@ def main(
         console.print(f"[bold]ComputeForge[/bold] v{__version__}")
         raise typer.Exit()
     if ctx.invoked_subcommand is None:
-        console.print(Panel.fit(
-            "[bold cyan]ComputeForge[/bold cyan] — Computer-Use Agent Platform\n\n"
-            "Usage: computeforge [OPTIONS] COMMAND\n\n"
-            "Commands:\n"
-            "  run       Run a computer-use session\n"
-            "  replay    Replay a recorded session\n"
-            "  config    Manage configuration\n"
-            "  shell     Start interactive shell\n"
-            "  export    Export session to JSON\n"
-            "  stats     Show session statistics\n"
-            "  version   Show version info\n\n"
-            "Options:\n"
-            "  --version, -V  Show version\n"
-            "  --help         Show this message",
-            title="ComputeForge",
-            border_style="cyan",
-        ))
+        console.print(
+            Panel.fit(
+                "[bold cyan]ComputeForge[/bold cyan] — Computer-Use Agent Platform\n\n"
+                "Usage: computeforge [OPTIONS] COMMAND\n\n"
+                "Commands:\n"
+                "  run       Run a computer-use session\n"
+                "  replay    Replay a recorded session\n"
+                "  config    Manage configuration\n"
+                "  shell     Start interactive shell\n"
+                "  export    Export session to JSON\n"
+                "  stats     Show session statistics\n"
+                "  version   Show version info\n\n"
+                "Options:\n"
+                "  --version, -V  Show version\n"
+                "  --help         Show this message",
+                title="ComputeForge",
+                border_style="cyan",
+            )
+        )
 
 
 def main_entry():

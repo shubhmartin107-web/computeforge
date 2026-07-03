@@ -8,7 +8,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 
-class SessionStatus(str, enum.Enum):
+class SessionStatus(enum.StrEnum):
     PENDING = "pending"
     RUNNING = "running"
     PAUSED = "paused"
@@ -19,6 +19,7 @@ class SessionStatus(str, enum.Enum):
 
 class SessionConfig(BaseModel):
     """Configuration for a session."""
+
     headless: bool = True
     viewport_width: int = 1280
     viewport_height: int = 720
@@ -32,6 +33,7 @@ class SessionConfig(BaseModel):
 
 class Session(BaseModel):
     """A complete computer-use session."""
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     status: SessionStatus = SessionStatus.PENDING
     config: SessionConfig = Field(default_factory=SessionConfig)

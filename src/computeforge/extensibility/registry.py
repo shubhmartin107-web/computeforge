@@ -55,7 +55,7 @@ class PluginRegistry:
 
     def unregister(self, name: str) -> None:
         if name in self._plugins:
-            plugin = self._plugins.pop(name)
+            self._plugins.pop(name)
             self._plugin_meta.pop(name, None)
             logger.info(f"Unregistered plugin: {name}")
 

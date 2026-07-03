@@ -6,7 +6,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 
-class RiskLevel(str, enum.Enum):
+class RiskLevel(enum.StrEnum):
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
@@ -15,6 +15,7 @@ class RiskLevel(str, enum.Enum):
 
 class ParameterDef(BaseModel):
     """Definition of a capability parameter."""
+
     name: str
     type: str = "string"
     description: str = ""
@@ -25,6 +26,7 @@ class ParameterDef(BaseModel):
 
 class Capability(BaseModel):
     """Declaration of a capability that the system can perform."""
+
     name: str
     description: str
     action_type: str = ""

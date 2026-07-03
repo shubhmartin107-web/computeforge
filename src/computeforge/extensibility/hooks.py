@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import enum
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
-from enum import Enum
 from typing import Any
 
 from computeforge.core.actions import ActionRequest, ActionResult
@@ -12,7 +12,7 @@ from computeforge.core.exceptions import SafetyBlocked
 logger = logging.getLogger("computeforge.extensibility.hooks")
 
 
-class HookPoint(str, Enum):
+class HookPoint(enum.StrEnum):
     BEFORE_ACTION = "before_action"
     AFTER_ACTION = "after_action"
     ON_ERROR = "on_error"
@@ -25,6 +25,7 @@ class HookPoint(str, Enum):
 @dataclass
 class Hook:
     """A registered hook with metadata."""
+
     name: str
     hook_point: HookPoint
     callback: Callable

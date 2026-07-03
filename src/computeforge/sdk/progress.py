@@ -8,6 +8,7 @@ from typing import Any
 @dataclass
 class ActionProgress:
     """Progress information for batch action execution."""
+
     total: int = 0
     current: int = 0
     current_action: str = ""

@@ -31,6 +31,7 @@ class GuardWeaveAdapter:
         if self._endpoint:
             try:
                 import httpx
+
                 self._client = httpx.AsyncClient(
                     base_url=self._endpoint,
                     headers={"Authorization": f"Bearer {self._api_key}"} if self._api_key else {},
@@ -43,6 +44,7 @@ class GuardWeaveAdapter:
         else:
             try:
                 from guardweave import PolicyEngine as GWPolicyEngine
+
                 self._gw_engine = GWPolicyEngine()
                 self._enabled = True
                 logger.info("Using local GuardWeave policy engine")
@@ -99,7 +101,9 @@ class GuardWeaveAdapter:
             result = await adapter.assess(request)
             if not result.get("allowed", True):
                 raise SafetyBlocked(
-                    action_type=request.type.value if hasattr(request.type, "value") else str(request.type),
+                    action_type=request.type.value
+                    if hasattr(request.type, "value")
+                    else str(request.type),
                     reason=result.get("reason", "Blocked by GuardWeave"),
                     policy="guardweave",
                 )

@@ -29,13 +29,16 @@ class GeminiProvider(LLMProvider):
         if not self._initialized:
             try:
                 import google.genai as genai
+
                 self._client = genai.aio.Client(
                     api_key=self.config.api_key,
                 )
                 self._model = self._client.aio.models.get(self.config.model)
                 self._initialized = True
             except ImportError:
-                raise ImportError("google-genai package required. Install with: pip install google-genai")
+                raise ImportError(
+                    "google-genai package required. Install with: pip install google-genai"
+                ) from None
 
     async def chat(self, messages: list[Message]) -> ProviderResponse:
         await self.initialize()
@@ -45,13 +48,16 @@ class GeminiProvider(LLMProvider):
             parts: list[dict[str, Any]] = [{"text": msg.content}]
             if msg.images:
                 import base64
+
                 for img in msg.images:
-                    parts.append({
-                        "inline_data": {
-                            "mime_type": "image/png",
-                            "data": base64.b64encode(img).decode("utf-8"),
-                        },
-                    })
+                    parts.append(
+                        {
+                            "inline_data": {
+                                "mime_type": "image/png",
+                                "data": base64.b64encode(img).decode("utf-8"),
+                            },
+                        }
+                    )
             contents.append({"role": msg.role, "parts": parts})
 
         generation_config = {
@@ -67,10 +73,16 @@ class GeminiProvider(LLMProvider):
 
         return ProviderResponse(
             content=response.text or "",
-            finish_reason=response.candidates[0].finish_reason.name if response.candidates else "stop",
+            finish_reason=response.candidates[0].finish_reason.name
+            if response.candidates
+            else "stop",
             usage={
-                "prompt_tokens": response.usage_metadata.prompt_token_count if response.usage_metadata else 0,
-                "completion_tokens": response.usage_metadata.candidates_token_count if response.usage_metadata else 0,
+                "prompt_tokens": response.usage_metadata.prompt_token_count
+                if response.usage_metadata
+                else 0,
+                "completion_tokens": response.usage_metadata.candidates_token_count
+                if response.usage_metadata
+                else 0,
             },
             model=self.config.model,
             raw=response.to_dict() if hasattr(response, "to_dict") else None,

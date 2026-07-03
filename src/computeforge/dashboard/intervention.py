@@ -54,6 +54,7 @@ def create_intervention_tab() -> None:
     def stop_engine() -> str:
         try:
             if _engine_state["engine"]:
+
                 async def _stop():
                     await _engine_state["engine"].stop_session()
                     _engine_state["engine"] = None
@@ -73,6 +74,7 @@ def create_intervention_tab() -> None:
                 return "No engine running. Start the engine first."
 
             import json
+
             params = json.loads(params_str) if params_str.strip() else {}
             atype = ActionType(action_type)
 
@@ -90,6 +92,7 @@ def create_intervention_tab() -> None:
     def pause_engine() -> str:
         try:
             if _engine_state["engine"]:
+
                 async def _pause():
                     await _engine_state["engine"].pause_session()
 
@@ -104,6 +107,7 @@ def create_intervention_tab() -> None:
     def resume_engine() -> str:
         try:
             if _engine_state["engine"]:
+
                 async def _resume():
                     await _engine_state["engine"].resume_session()
 
@@ -132,7 +136,6 @@ def create_intervention_tab() -> None:
                 pause_btn = gr.Button("⏸️ Pause", variant="secondary")
                 resume_btn = gr.Button("▶️ Resume", variant="secondary")
 
-            status_display = gr.Markdown("🔴 **Engine is stopped**")
             engine_output = gr.Markdown("")
 
         with gr.Column(scale=1):
@@ -154,4 +157,8 @@ def create_intervention_tab() -> None:
     stop_btn.click(fn=stop_engine, inputs=[], outputs=[engine_output])
     pause_btn.click(fn=pause_engine, inputs=[], outputs=[engine_output])
     resume_btn.click(fn=resume_engine, inputs=[], outputs=[engine_output])
-    execute_btn.click(fn=execute_custom_action, inputs=[action_type_dropdown, action_params], outputs=[action_result])
+    execute_btn.click(
+        fn=execute_custom_action,
+        inputs=[action_type_dropdown, action_params],
+        outputs=[action_result],
+    )

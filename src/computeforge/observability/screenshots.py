@@ -7,7 +7,7 @@ from typing import Any
 from PIL import Image, ImageDraw, ImageFont
 
 
-def _get_font(size: int = 14) -> ImageFont:
+def _get_font(size: int = 14) -> Any:
     font_paths = [
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         "/System/Library/Fonts/Helvetica.ttc",
@@ -37,7 +37,7 @@ def annotate_screenshot(
     return buf.getvalue()
 
 
-def _draw_annotation(draw: ImageDraw, ann: dict[str, Any], font: ImageFont) -> None:
+def _draw_annotation(draw: Any, ann: dict[str, Any], font: Any) -> None:
     """Draw a single annotation on the image."""
     atype = ann.get("type", "box")
 

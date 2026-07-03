@@ -8,6 +8,7 @@ from computeforge.core.actions import ActionType
 
 class RecoveryStrategyType(Enum):
     """Types of recovery strategies for failed actions."""
+
     EXPONENTIAL_BACKOFF = "exponential_backoff"
     CONSTANT_RETRY = "constant_retry"
     LINEAR_RETRY = "linear_retry"
@@ -19,6 +20,7 @@ class RecoveryStrategyType(Enum):
 @dataclass
 class RecoveryStrategy:
     """Configuration for how to recover from action failures."""
+
     type: RecoveryStrategyType = RecoveryStrategyType.EXPONENTIAL_BACKOFF
     max_retries: int = 3
     base_delay_ms: float = 500.0
@@ -34,11 +36,12 @@ class RecoveryStrategy:
         elif self.type == RecoveryStrategyType.WAIT_AND_RETRY:
             delay = self.base_delay_ms / 1000.0
         else:  # EXPONENTIAL_BACKOFF
-            delay = min(self.base_delay_ms * (2 ** attempt), self.max_delay_ms) / 1000.0
+            delay = min(self.base_delay_ms * (2**attempt), self.max_delay_ms) / 1000.0
 
         if self.jitter:
             import random
-            delay *= (0.5 + random.random())
+
+            delay *= 0.5 + random.random()
         return min(delay, self.max_delay_ms / 1000.0)
 
 

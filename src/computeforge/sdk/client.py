@@ -23,6 +23,7 @@ logger = logging.getLogger("computeforge.sdk.client")
 @dataclass
 class BatchResult:
     """Result of a batch action execution."""
+
     results: list[ActionResult] = field(default_factory=list)
     total_duration_ms: float = 0.0
     succeeded: int = 0
@@ -62,7 +63,7 @@ class ComputeForgeClient:
         if auto_connect:
             loop = asyncio.get_event_loop()
             if loop.is_running():
-                asyncio.ensure_future(self.connect())
+                asyncio.ensure_future(self.connect())  # noqa: RUF006
             else:
                 loop.run_until_complete(self.connect())
 
@@ -134,6 +135,7 @@ class ComputeForgeClient:
         return session
 
     async def get_session(self, session_id: str) -> Session:
+        assert self._storage is not None
         return await self._storage.load_session(session_id)
 
     async def list_sessions(
@@ -147,14 +149,17 @@ class ComputeForgeClient:
         return []
 
     async def delete_session(self, session_id: str) -> None:
+        assert self._storage is not None
         await self._storage.delete_session(session_id)
 
     async def get_session_summary(self, session_id: str) -> dict[str, Any]:
+        assert self._storage is not None
         replay = ReplayEngine(storage=self._storage)
         return await replay.get_session_summary(session_id)
 
     async def export_session(self, session_id: str, output_path: str | Path | None = None) -> str:
         """Export a session to JSON."""
+        assert self._storage is not None
         json_str = await self._storage.export_session_json(session_id)
         if output_path:
             Path(output_path).write_text(json_str)
@@ -162,6 +167,7 @@ class ComputeForgeClient:
 
     async def import_session(self, json_str: str) -> str:
         """Import a session from JSON."""
+        assert self._storage is not None
         return await self._storage.import_session_json(json_str)
 
     async def get_engine_state(self) -> dict[str, Any]:
@@ -225,23 +231,27 @@ class ComputeForgeClient:
                     logger.info(f"Batch stopped at action {i} due to failure")
                     break
             except Exception as e:
-                results.append(ActionResult(
-                    success=False,
-                    action_type=ActionType(action.get("type", "screenshot")),
-                    error=str(e),
-                ))
+                results.append(
+                    ActionResult(
+                        success=False,
+                        action_type=ActionType(action.get("type", "screenshot")),
+                        error=str(e),
+                    )
+                )
                 break
 
         duration = (time.time() - start) * 1000
         succeeded = sum(1 for r in results if r.success)
         failed = sum(1 for r in results if not r.success)
 
-        await self._notify_progress(ActionProgress(
-            total=len(actions),
-            current=len(results),
-            current_action="done",
-            complete=True,
-        ))
+        await self._notify_progress(
+            ActionProgress(
+                total=len(actions),
+                current=len(results),
+                current_action="done",
+                complete=True,
+            )
+        )
 
         return BatchResult(
             results=results,
@@ -274,7 +284,6 @@ class ComputeForgeClient:
         if self._engine is None:
             raise ComputeForgeError("No active session. Call create_session() first.")
 
-        start = time.time()
         try:
             result = await self._engine.execute(action_type, **params)
         except ComputeForgeError as e:
@@ -282,6 +291,7 @@ class ComputeForgeClient:
 
         if self._recorder and self._engine.session:
             from computeforge.core.actions import ActionRequest
+
             req = ActionRequest(type=action_type, params=params)
             await self._recorder.record_action(req, result=result)
 
@@ -294,7 +304,7 @@ class ComputeForgeClient:
                     await cb(progress)
                 else:
                     cb(progress)
-            except Exception:
+            except Exception:  # nosec
                 pass
 
     # ─── Async Context Manager ───────────────────────────────────────

@@ -121,7 +121,9 @@ class InteractiveShell(cmd.Cmd):
             console.print("[red]Usage: click <selector>[/red]")
             return
         result = self._run_async(self._client.click(arg.strip()))
-        console.print("[green]Clicked[/green]" if result.success else f"[red]Failed: {result.error}[/red]")
+        console.print(
+            "[green]Clicked[/green]" if result.success else f"[red]Failed: {result.error}[/red]"
+        )
 
     def do_type(self, arg):
         """Type text: type <text> [--selector <sel>]"""
@@ -138,7 +140,9 @@ class InteractiveShell(cmd.Cmd):
             if idx + 1 < len(args):
                 selector = args[idx + 1]
         result = self._run_async(self._client.type_text(text, selector=selector))
-        console.print("[green]Typed[/green]" if result.success else f"[red]Failed: {result.error}[/red]")
+        console.print(
+            "[green]Typed[/green]" if result.success else f"[red]Failed: {result.error}[/red]"
+        )
 
     def do_ss(self, arg):
         """Take a screenshot: ss"""
@@ -147,7 +151,11 @@ class InteractiveShell(cmd.Cmd):
         result = self._run_async(self._client.screenshot())
         if result.success:
             img = result.data.get("image") if result.data else None
-            console.print(f"[green]Screenshot captured:[/green] {len(img)} bytes" if img else "[green]Screenshot captured[/green]")
+            console.print(
+                f"[green]Screenshot captured:[/green] {len(img)} bytes"
+                if img
+                else "[green]Screenshot captured[/green]"
+            )
         else:
             console.print(f"[red]Failed: {result.error}[/red]")
 
@@ -157,7 +165,11 @@ class InteractiveShell(cmd.Cmd):
             return
         delta = int(arg) if arg else 300
         result = self._run_async(self._client.scroll(delta_y=delta))
-        console.print(f"[green]Scrolled {delta}px[/green]" if result.success else f"[red]Failed: {result.error}[/red]")
+        console.print(
+            f"[green]Scrolled {delta}px[/green]"
+            if result.success
+            else f"[red]Failed: {result.error}[/red]"
+        )
 
     def do_extract(self, arg):
         """Extract text: extract [selector]"""
@@ -214,18 +226,21 @@ class InteractiveShell(cmd.Cmd):
             return
         session_id = arg.strip()
         from computeforge.observability.replay import ReplayEngine
+
         replay = ReplayEngine(storage=self._client.storage)
         summary = self._run_async(replay.get_session_summary(session_id))
-        console.print(Panel.fit(
-            f"[bold]Session Summary[/bold]\n\n"
-            f"Status: {summary['status']}\n"
-            f"Actions: {summary['total_actions']} "
-            f"(✅ {summary['succeeded']} ❌ {summary['failed']} 🚫 {summary['blocked']})\n"
-            f"Success Rate: {summary['success_rate']}%\n"
-            f"Duration: {summary['total_duration_ms']:.0f}ms\n"
-            f"Avg: {summary['avg_action_duration_ms']:.0f}ms/action",
-            border_style="cyan",
-        ))
+        console.print(
+            Panel.fit(
+                f"[bold]Session Summary[/bold]\n\n"
+                f"Status: {summary['status']}\n"
+                f"Actions: {summary['total_actions']} "
+                f"(✅ {summary['succeeded']} ❌ {summary['failed']} 🚫 {summary['blocked']})\n"
+                f"Success Rate: {summary['success_rate']}%\n"
+                f"Duration: {summary['total_duration_ms']:.0f}ms\n"
+                f"Avg: {summary['avg_action_duration_ms']:.0f}ms/action",
+                border_style="cyan",
+            )
+        )
 
     def do_export(self, arg):
         """Export a session: export <session_id> [output_file]"""

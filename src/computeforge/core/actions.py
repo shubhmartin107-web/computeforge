@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 
-class ActionType(str, enum.Enum):
+class ActionType(enum.StrEnum):
     """All supported action types in the ComputeForge system."""
 
     NAVIGATE = "navigate"
@@ -59,7 +59,9 @@ class ActionResult:
         return {
             "success": self.success,
             "action_id": self.action_id,
-            "action_type": self.action_type.value if isinstance(self.action_type, ActionType) else self.action_type,
+            "action_type": self.action_type.value
+            if isinstance(self.action_type, ActionType)
+            else self.action_type,
             "data": self.data,
             "error": self.error,
             "duration_ms": self.duration_ms,
@@ -72,9 +74,11 @@ _action_registry: dict[ActionType, Any] = {}
 
 def register_action(action_type: ActionType):
     """Decorator to register an action handler."""
+
     def decorator(func):
         _action_registry[action_type] = func
         return func
+
     return decorator
 
 

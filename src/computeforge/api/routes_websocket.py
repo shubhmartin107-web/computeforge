@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 
@@ -30,15 +31,17 @@ async def websocket_session_stream(websocket: WebSocket, session_id: str):
     try:
         session = await replay.get_session(session_id)
         summary = await replay.get_session_summary(session_id)
-        await websocket.send_json({
-            "type": "session_state",
-            "data": {
-                "session_id": session.id,
-                "status": session.status.value,
-                "action_count": session.action_count,
-                **summary,
-            },
-        })
+        await websocket.send_json(
+            {
+                "type": "session_state",
+                "data": {
+                    "session_id": session.id,
+                    "status": session.status.value,
+                    "action_count": session.action_count,
+                    **summary,
+                },
+            }
+        )
     except Exception as e:
         await websocket.send_json({"type": "error", "data": {"message": str(e)}})
         await websocket.close()
@@ -68,22 +71,23 @@ async def websocket_session_stream(websocket: WebSocket, session_id: str):
                     img = storage.load_screenshot(action.screenshot_after)
                     if img:
                         import base64
-                        await websocket.send_json({
-                            "type": "screenshot",
-                            "data": {
-                                "action_id": action.id,
-                                "image": base64.b64encode(img).decode("utf-8"),
-                                "format": "png",
-                            },
-                        })
+
+                        await websocket.send_json(
+                            {
+                                "type": "screenshot",
+                                "data": {
+                                    "action_id": action.id,
+                                    "image": base64.b64encode(img).decode("utf-8"),
+                                    "format": "png",
+                                },
+                            }
+                        )
 
             offset += len(actions)
 
             # Wait for new data or client message
             try:
-                message = await asyncio.wait_for(
-                    websocket.receive_text(), timeout=1.0
-                )
+                message = await asyncio.wait_for(websocket.receive_text(), timeout=1.0)
                 msg_data = json.loads(message)
                 if msg_data.get("type") == "ping":
                     await websocket.send_json({"type": "pong"})
@@ -98,9 +102,7 @@ async def websocket_session_stream(websocket: WebSocket, session_id: str):
         logger.info(f"WebSocket disconnected: {session_id[:8]}...")
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
-        try:
+        with contextlib.suppress(Exception):
             await websocket.send_json({"type": "error", "data": {"message": str(e)}})
-        except Exception:
-            pass
     finally:
         await storage.close()

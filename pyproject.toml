@@ -102,11 +102,13 @@ src = ["src"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP", "B", "SIM", "ARG", "RUF"]
-ignore = ["SIM117", "ARG001", "ARG002", "E501"]
+ignore = ["SIM117", "ARG001", "ARG002", "E501", "N818"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["S101", "PLR2004", "SLF001", "ARG001"]
 "examples/*" = ["ARG002"]
+"src/computeforge/extensibility/plugin.py" = ["B027"]
+"src/computeforge/cli/shell.py" = ["N802"]
 "src/computeforge/api/*" = ["B008"]
 
 [tool.ruff.format]

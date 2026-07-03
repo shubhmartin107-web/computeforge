@@ -22,17 +22,22 @@ async def execute_action(
     try:
         atype = ActionType(action_type)
     except ValueError:
-        raise HTTPException(status_code=400, detail=f"Unknown action type: {action_type}")
+        raise HTTPException(status_code=400, detail=f"Unknown action type: {action_type}") from None
 
     try:
         result = await engine.execute(atype, **(params or {}))
-        return {"success": result.success, "data": result.data, "error": result.error, "duration_ms": result.duration_ms}
+        return {
+            "success": result.success,
+            "data": result.data,
+            "error": result.error,
+            "duration_ms": result.duration_ms,
+        }
     except SafetyBlocked as e:
-        raise HTTPException(status_code=403, detail=str(e))
+        raise HTTPException(status_code=403, detail=str(e)) from e
     except ElementNotFound as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
     except ActionFailed as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/batch")
@@ -52,7 +57,14 @@ async def execute_batch(
 
         try:
             result = await engine.execute(atype, **(action.get("params", {})))
-            results.append({"success": result.success, "data": result.data, "error": result.error, "duration_ms": result.duration_ms})
+            results.append(
+                {
+                    "success": result.success,
+                    "data": result.data,
+                    "error": result.error,
+                    "duration_ms": result.duration_ms,
+                }
+            )
         except Exception as e:
             results.append({"success": False, "error": str(e)})
             break

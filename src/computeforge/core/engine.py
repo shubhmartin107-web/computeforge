@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import time
 from collections.abc import Callable
@@ -43,6 +44,7 @@ class EngineState(Enum):
 @dataclass
 class EngineMetrics:
     """Performance metrics for the engine."""
+
     total_actions: int = 0
     successful_actions: int = 0
     failed_actions: int = 0
@@ -128,7 +130,11 @@ class ComputeEngine:
 
     @property
     def is_running(self) -> bool:
-        return self._state == EngineState.RUNNING and self._browser is not None and self._browser.is_running
+        return (
+            self._state == EngineState.RUNNING
+            and self._browser is not None
+            and self._browser.is_running
+        )
 
     @property
     def is_paused(self) -> bool:
@@ -174,6 +180,7 @@ class ComputeEngine:
     async def start_session(self, browser_type: BrowserType = BrowserType.CHROMIUM) -> Session:
         if self._session is None:
             await self.create_session()
+        assert self._session is not None
 
         self._state = EngineState.STARTING
         await self._dispatch_state_change(EngineState.STARTING)
@@ -206,6 +213,7 @@ class ComputeEngine:
             raise ComputeForgeError("Cannot pause: engine not running")
         self._state = EngineState.PAUSED
         self._pause_event.clear()
+        assert self._session is not None
         self._session.pause()
         logger.info(f"Session paused: {self._session.id}")
         await self._dispatch_state_change(EngineState.PAUSED)
@@ -215,6 +223,7 @@ class ComputeEngine:
             raise ComputeForgeError("Cannot resume: engine not paused")
         self._state = EngineState.RUNNING
         self._pause_event.set()
+        assert self._session is not None
         self._session.resume()
         logger.info(f"Session resumed: {self._session.id}")
         await self._dispatch_state_change(EngineState.RUNNING)
@@ -230,7 +239,10 @@ class ComputeEngine:
         finally:
             self._browser = None
             self._state = EngineState.STOPPED
-            if self._session and self._session.status in (SessionStatus.RUNNING, SessionStatus.PAUSED):
+            if self._session and self._session.status in (
+                SessionStatus.RUNNING,
+                SessionStatus.PAUSED,
+            ):
                 self._session.complete()
             logger.info(f"Session stopped: {self._session.id if self._session else 'none'}")
             await self._dispatch_state_change(EngineState.STOPPED)
@@ -247,9 +259,13 @@ class ComputeEngine:
                 "retried": self._metrics.retried_actions,
                 "avg_duration_ms": round(self._metrics.avg_action_duration_ms, 2),
                 "total_duration_ms": round(self._metrics.total_duration_ms, 2),
-                "uptime_seconds": round(time.time() - self._metrics.start_time, 2) if self._metrics.start_time else 0,
+                "uptime_seconds": round(time.time() - self._metrics.start_time, 2)
+                if self._metrics.start_time
+                else 0,
             },
-            "browser_running": self._browser is not None and self._browser.is_running if self._browser else False,
+            "browser_running": self._browser is not None and self._browser.is_running
+            if self._browser
+            else False,
             "config": self.config.model_dump() if self.config else None,
         }
 
@@ -260,7 +276,7 @@ class ComputeEngine:
             try:
                 action_type = ActionType(action_type)
             except ValueError:
-                raise ActionFailed(action_type, f"Unknown action type: {action_type}")
+                raise ActionFailed(action_type, f"Unknown action type: {action_type}") from None
 
         if self._state == EngineState.STOPPED:
             raise SessionNotActive("No active session. Call start_session() first.")
@@ -278,13 +294,24 @@ class ComputeEngine:
             await self._action_semaphore.acquire()
         try:
             async with self._action_lock:
-                if self.session.config.max_actions > 0 and self._total_actions_executed >= self.session.config.max_actions:
-                    raise ActionFailed(action_type.value, f"Max actions limit reached ({self.session.config.max_actions})")
+                if (
+                    self.session.config.max_actions > 0
+                    and self._total_actions_executed >= self.session.config.max_actions
+                ):
+                    raise ActionFailed(
+                        action_type.value,
+                        f"Max actions limit reached ({self.session.config.max_actions})",
+                    )
 
                 if self.session.config.timeout_seconds > 0:
-                    elapsed = (time.time() - self._metrics.start_time) if self._metrics.start_time else 0
+                    elapsed = (
+                        (time.time() - self._metrics.start_time) if self._metrics.start_time else 0
+                    )
                     if elapsed > self.session.config.timeout_seconds:
-                        raise ActionFailed(action_type.value, f"Session timeout exceeded ({self.session.config.timeout_seconds}s)")
+                        raise ActionFailed(
+                            action_type.value,
+                            f"Session timeout exceeded ({self.session.config.timeout_seconds}s)",
+                        )
 
                 start_time = time.time()
 
@@ -310,8 +337,11 @@ class ComputeEngine:
                     duration_ms = (time.time() - start_time) * 1000
                     result.duration_ms = duration_ms
 
-                    self._metrics.record_action(duration_ms, result.success, self._metrics.retried_actions > 0)
+                    self._metrics.record_action(
+                        duration_ms, result.success, self._metrics.retried_actions > 0
+                    )
                     self._total_actions_executed += 1
+                    assert self._session is not None
                     self._session.increment_actions()
 
                     for hook in self._post_action_hooks:
@@ -331,12 +361,16 @@ class ComputeEngine:
                 except SafetyBlocked:
                     raise
                 except ElementNotFound as e:
-                    await self._handle_error(e, {"action_type": action_type.value, "params": params})
+                    await self._handle_error(
+                        e, {"action_type": action_type.value, "params": params}
+                    )
                     raise
                 except ActionFailed:
                     raise
                 except Exception as e:
-                    await self._handle_error(e, {"action_type": action_type.value, "params": params})
+                    await self._handle_error(
+                        e, {"action_type": action_type.value, "params": params}
+                    )
                     raise ActionFailed(action_type.value, str(e), e) from e
         finally:
             if self._action_semaphore:
@@ -358,11 +392,13 @@ class ComputeEngine:
                     logger.info(f"Batch stopped at action {i} due to failure")
                     break
             except Exception as e:
-                results.append(ActionResult(
-                    success=False,
-                    action_type=ActionType(action.get("type", "screenshot")),
-                    error=str(e),
-                ))
+                results.append(
+                    ActionResult(
+                        success=False,
+                        action_type=ActionType(action.get("type", "screenshot")),
+                        error=str(e),
+                    )
+                )
                 break
         return results
 
@@ -402,21 +438,27 @@ class ComputeEngine:
 
         for attempt in range(max_retries + 1):
             try:
+                assert self._browser is not None
                 return await self._browser.execute_action(request)
             except (ElementNotFound, ActionFailed) as e:
                 if attempt < max_retries:
-                    delay = strategy.get_delay(attempt) if strategy else (2 ** attempt)
-                    logger.warning(f"Retry {attempt + 1}/{max_retries} for {request.type} after {delay}s: {e}")
+                    delay = strategy.get_delay(attempt) if strategy else (2**attempt)
+                    logger.warning(
+                        f"Retry {attempt + 1}/{max_retries} for {request.type} after {delay}s: {e}"
+                    )
                     await asyncio.sleep(delay)
                     continue
                 raise
             except Exception as e:
                 if attempt < max_retries:
-                    delay = 2 ** attempt
-                    logger.warning(f"Retry {attempt + 1}/{max_retries} for {request.type} after {delay}s: {e}")
+                    delay = 2**attempt
+                    logger.warning(
+                        f"Retry {attempt + 1}/{max_retries} for {request.type} after {delay}s: {e}"
+                    )
                     await asyncio.sleep(delay)
                     continue
-                raise ActionFailed(request.type.value, str(e), e)
+                raise ActionFailed(request.type.value, str(e), e) from e
+        raise RuntimeError("Unreachable")
 
     async def _run_hook(self, hook: Callable, *args, **kwargs) -> None:
         try:
@@ -431,17 +473,13 @@ class ComputeEngine:
 
     async def _handle_error(self, error: Exception, context: dict[str, Any]) -> None:
         for hook in self._on_error_hooks:
-            try:
+            with contextlib.suppress(Exception):
                 await self._run_hook(hook, error, context)
-            except Exception:
-                pass
 
     async def _dispatch_state_change(self, new_state: EngineState) -> None:
         for hook in self._on_state_change_hooks:
-            try:
+            with contextlib.suppress(Exception):
                 await self._run_hook(hook, new_state)
-            except Exception:
-                pass
 
     # ─── Async Context Manager ───────────────────────────────────────────
 

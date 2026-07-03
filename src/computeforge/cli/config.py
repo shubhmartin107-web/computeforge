@@ -39,7 +39,7 @@ def config_command(
 
     elif action == "caps":
         registry = CapabilityRegistry()
-        caps = registry.list()
+        caps = registry.list_capabilities()
         table = Table(title=f"Capabilities ({len(caps)} registered)")
         table.add_column("Name", style="cyan")
         table.add_column("Category", style="green")
@@ -66,13 +66,19 @@ def config_command(
     elif action == "policies":
         engine = PolicyEngine()
         from computeforge.safety.policies import PolicyDecision
+
         table = Table(title="Default Policies")
         table.add_column("Rule", style="cyan")
         table.add_column("Threshold", style="yellow")
         table.add_column("Decision", style="green")
         table.add_column("Reason", style="white")
 
-        for rule in engine._policies.get("default", type("obj", (object,), {"rules": []})).rules:
+        default_policy = engine._policies.get("default")
+        if default_policy is None:
+            rules: list = []
+        else:
+            rules = default_policy.rules
+        for rule in rules:
             decision_color = {
                 PolicyDecision.ALLOW: "green",
                 PolicyDecision.DENY: "red",

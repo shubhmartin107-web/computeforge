@@ -29,13 +29,16 @@ class DeepSeekProvider(LLMProvider):
         if not self._initialized:
             try:
                 from openai import AsyncOpenAI
+
                 self._client = AsyncOpenAI(
                     api_key=self.config.api_key,
                     base_url=self.config.base_url,
                 )
                 self._initialized = True
             except ImportError:
-                raise ImportError("openai package required. Install with: pip install computeforge[deepseek]")
+                raise ImportError(
+                    "openai package required. Install with: pip install computeforge[deepseek]"
+                ) from None
 
     async def chat(self, messages: list[Message]) -> ProviderResponse:
         await self.initialize()
@@ -45,11 +48,14 @@ class DeepSeekProvider(LLMProvider):
             if msg.images:
                 for img in msg.images:
                     import base64
+
                     b64 = base64.b64encode(img).decode("utf-8")
-                    content.append({
-                        "type": "image_url",
-                        "image_url": {"url": f"data:image/png;base64,{b64}"},
-                    })
+                    content.append(
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:image/png;base64,{b64}"},
+                        }
+                    )
             content.append({"type": "text", "text": msg.content})
             api_messages.append({"role": msg.role, "content": content})
 

@@ -31,6 +31,7 @@ class FlowLensAdapter:
         if self._endpoint:
             try:
                 import httpx
+
                 self._httpx_client = httpx.AsyncClient(
                     base_url=self._endpoint,
                     headers={"Authorization": f"Bearer {self._api_key}"} if self._api_key else {},
@@ -41,7 +42,9 @@ class FlowLensAdapter:
             except Exception as e:
                 logger.warning(f"Failed to connect to FlowLens: {e}")
         else:
-            logger.info("FlowLens not configured (no endpoint). Use COMPUTEFORGE_FLOWLENS_ENDPOINT env var.")
+            logger.info(
+                "FlowLens not configured (no endpoint). Use COMPUTEFORGE_FLOWLENS_ENDPOINT env var."
+            )
 
     async def close(self) -> None:
         if self._httpx_client:
@@ -58,33 +61,43 @@ class FlowLensAdapter:
         except Exception as e:
             logger.debug(f"FlowLens push failed: {e}")
 
-    async def push_session_start(self, session_id: str, metadata: dict[str, Any] | None = None) -> None:
+    async def push_session_start(
+        self, session_id: str, metadata: dict[str, Any] | None = None
+    ) -> None:
         if not self._enabled or not self._httpx_client:
             return
         try:
-            await self._httpx_client.post("/api/v1/spans", json={
-                "span_id": f"session_{session_id}",
-                "name": "computeforge.session",
-                "type": "session",
-                "status": "started",
-                "metadata": metadata or {},
-                "timestamp": datetime.utcnow().isoformat(),
-            })
+            await self._httpx_client.post(
+                "/api/v1/spans",
+                json={
+                    "span_id": f"session_{session_id}",
+                    "name": "computeforge.session",
+                    "type": "session",
+                    "status": "started",
+                    "metadata": metadata or {},
+                    "timestamp": datetime.utcnow().isoformat(),
+                },
+            )
         except Exception as e:
             logger.debug(f"FlowLens push_session_start failed: {e}")
 
-    async def push_session_end(self, session_id: str, status: str, summary: dict[str, Any] | None = None) -> None:
+    async def push_session_end(
+        self, session_id: str, status: str, summary: dict[str, Any] | None = None
+    ) -> None:
         if not self._enabled or not self._httpx_client:
             return
         try:
-            await self._httpx_client.post("/api/v1/spans", json={
-                "span_id": f"session_{session_id}",
-                "name": "computeforge.session",
-                "type": "session",
-                "status": status,
-                "metadata": summary or {},
-                "timestamp": datetime.utcnow().isoformat(),
-            })
+            await self._httpx_client.post(
+                "/api/v1/spans",
+                json={
+                    "span_id": f"session_{session_id}",
+                    "name": "computeforge.session",
+                    "type": "session",
+                    "status": status,
+                    "metadata": summary or {},
+                    "timestamp": datetime.utcnow().isoformat(),
+                },
+            )
         except Exception as e:
             logger.debug(f"FlowLens push_session_end failed: {e}")
 
@@ -100,6 +113,8 @@ class FlowLensAdapter:
             "error": action.error,
             "risk_score": action.risk_score,
             "safety_decision": action.safety_decision,
-            "timestamp": action.created_at.isoformat() if action.created_at else datetime.utcnow().isoformat(),
+            "timestamp": action.created_at.isoformat()
+            if action.created_at
+            else datetime.utcnow().isoformat(),
             "metadata": action.metadata,
         }

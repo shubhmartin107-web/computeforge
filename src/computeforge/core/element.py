@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 
-class FindingStrategy(str, enum.Enum):
+class FindingStrategy(enum.StrEnum):
     """Strategies for locating elements on a page."""
 
     CSS = "css"
@@ -76,7 +76,7 @@ class ElementFinder:
                 element = await self.find(criteria)
                 if element is not None:
                     return element
-            except Exception:
+            except Exception:  # nosec
                 continue
         return None
 

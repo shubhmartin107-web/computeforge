@@ -7,8 +7,9 @@ from typing import Any
 from computeforge.core.actions import ActionResult, ActionType
 
 
-class DesktopBackendType(str, enum.Enum):
+class DesktopBackendType(enum.StrEnum):
     """Supported desktop backends."""
+
     PLAYWRIGHT = "playwright"
     PYAUTOGUI = "pyautogui"
     MSS = "mss"
@@ -18,28 +19,26 @@ class DesktopController(ABC):
     """Abstract base class for desktop control backends."""
 
     @abstractmethod
-    async def click(self, x: int, y: int, button: str = "left") -> ActionResult:
-        ...  # pragma: no cover
+    async def click(
+        self, x: int, y: int, button: str = "left"
+    ) -> ActionResult: ...  # pragma: no cover
 
     @abstractmethod
-    async def type_text(self, text: str, delay: int = 10) -> ActionResult:
-        ...  # pragma: no cover
+    async def type_text(self, text: str, delay: int = 10) -> ActionResult: ...  # pragma: no cover
 
     @abstractmethod
-    async def move_mouse(self, x: int, y: int) -> ActionResult:
-        ...  # pragma: no cover
+    async def move_mouse(self, x: int, y: int) -> ActionResult: ...  # pragma: no cover
 
     @abstractmethod
-    async def screenshot(self, region: tuple[int, int, int, int] | None = None) -> ActionResult:
-        ...  # pragma: no cover
+    async def screenshot(
+        self, region: tuple[int, int, int, int] | None = None
+    ) -> ActionResult: ...  # pragma: no cover
 
     @abstractmethod
-    async def press_key(self, key: str) -> ActionResult:
-        ...  # pragma: no cover
+    async def press_key(self, key: str) -> ActionResult: ...  # pragma: no cover
 
     @abstractmethod
-    async def scroll(self, clicks: int = 1) -> ActionResult:
-        ...  # pragma: no cover
+    async def scroll(self, clicks: int = 1) -> ActionResult: ...  # pragma: no cover
 
 
 class _BaseDesktopController(DesktopController):
@@ -47,28 +46,45 @@ class _BaseDesktopController(DesktopController):
 
     async def _click_impl(self, x: int, y: int, button: str = "left") -> ActionResult:
         import pyautogui
+
         pyautogui.click(x, y, button=button)
-        return ActionResult(success=True, action_type=ActionType.DESKTOP_CLICK, data={"x": x, "y": y, "button": button})
+        return ActionResult(
+            success=True,
+            action_type=ActionType.DESKTOP_CLICK,
+            data={"x": x, "y": y, "button": button},
+        )
 
     async def _type_impl(self, text: str, delay: int = 10) -> ActionResult:
         import pyautogui
+
         pyautogui.write(text, interval=delay / 1000.0)
-        return ActionResult(success=True, action_type=ActionType.DESKTOP_TYPE, data={"text_length": len(text)})
+        return ActionResult(
+            success=True, action_type=ActionType.DESKTOP_TYPE, data={"text_length": len(text)}
+        )
 
     async def _move_impl(self, x: int, y: int) -> ActionResult:
         import pyautogui
+
         pyautogui.moveTo(x, y)
-        return ActionResult(success=True, action_type=ActionType.DESKTOP_MOVE, data={"x": x, "y": y})
+        return ActionResult(
+            success=True, action_type=ActionType.DESKTOP_MOVE, data={"x": x, "y": y}
+        )
 
     async def _press_key_impl(self, key: str) -> ActionResult:
         import pyautogui
+
         pyautogui.press(key)
-        return ActionResult(success=True, action_type=ActionType.DESKTOP_KEYPRESS, data={"key": key})
+        return ActionResult(
+            success=True, action_type=ActionType.DESKTOP_KEYPRESS, data={"key": key}
+        )
 
     async def _scroll_impl(self, clicks: int = 1) -> ActionResult:
         import pyautogui
+
         pyautogui.scroll(clicks)
-        return ActionResult(success=True, action_type=ActionType.DESKTOP_SCROLL, data={"clicks": clicks})
+        return ActionResult(
+            success=True, action_type=ActionType.DESKTOP_SCROLL, data={"clicks": clicks}
+        )
 
     async def click(self, x: int, y: int, button: str = "left") -> ActionResult:
         try:
@@ -92,7 +108,9 @@ class _BaseDesktopController(DesktopController):
         try:
             return await self._press_key_impl(key)
         except Exception as e:
-            return ActionResult(success=False, action_type=ActionType.DESKTOP_KEYPRESS, error=str(e))
+            return ActionResult(
+                success=False, action_type=ActionType.DESKTOP_KEYPRESS, error=str(e)
+            )
 
     async def scroll(self, clicks: int = 1) -> ActionResult:
         try:
@@ -109,12 +127,19 @@ class PyAutoGUIController(_BaseDesktopController):
             import io
 
             import pyautogui
+
             img = pyautogui.screenshot(region=region)
             buf = io.BytesIO()
             img.save(buf, format="PNG")
-            return ActionResult(success=True, action_type=ActionType.DESKTOP_SCREENSHOT, data={"image": buf.getvalue()})
+            return ActionResult(
+                success=True,
+                action_type=ActionType.DESKTOP_SCREENSHOT,
+                data={"image": buf.getvalue()},
+            )
         except Exception as e:
-            return ActionResult(success=False, action_type=ActionType.DESKTOP_SCREENSHOT, error=str(e))
+            return ActionResult(
+                success=False, action_type=ActionType.DESKTOP_SCREENSHOT, error=str(e)
+            )
 
 
 class MSSController(_BaseDesktopController):
@@ -123,21 +148,35 @@ class MSSController(_BaseDesktopController):
     async def screenshot(self, region: tuple[int, int, int, int] | None = None) -> ActionResult:
         try:
             import mss
+
             with mss.mss() as sct:
                 if region:
-                    monitor = {"top": region[1], "left": region[0], "width": region[2], "height": region[3]}
+                    monitor = {
+                        "top": region[1],
+                        "left": region[0],
+                        "width": region[2],
+                        "height": region[3],
+                    }
                     img = sct.grab(monitor)
                 else:
                     img = sct.grab(sct.monitors[1])
                 import io
 
                 from PIL import Image
+
                 pil_img = Image.frombytes("RGB", img.size, img.rgb)
                 buf = io.BytesIO()
                 pil_img.save(buf, format="PNG")
-                return ActionResult(success=True, action_type=ActionType.DESKTOP_SCREENSHOT, data={"image": buf.getvalue()})
+                return ActionResult(
+                    success=True,
+                    action_type=ActionType.DESKTOP_SCREENSHOT,
+                    data={"image": buf.getvalue()},
+                )
         except Exception as e:
-            return ActionResult(success=False, action_type=ActionType.DESKTOP_SCREENSHOT, error=str(e))
+            return ActionResult(
+                success=False, action_type=ActionType.DESKTOP_SCREENSHOT, error=str(e)
+            )
+
 
 class PlaywrightDesktopController(_BaseDesktopController):
     """Desktop control via Playwright's CDP (experimental)."""
@@ -154,12 +193,20 @@ class PlaywrightDesktopController(_BaseDesktopController):
                 screenshot_bytes = await self._page.screenshot(clip=clip, full_page=False)
             else:
                 screenshot_bytes = await self._page.screenshot(full_page=False)
-            return ActionResult(success=True, action_type=ActionType.DESKTOP_SCREENSHOT, data={"image": screenshot_bytes})
+            return ActionResult(
+                success=True,
+                action_type=ActionType.DESKTOP_SCREENSHOT,
+                data={"image": screenshot_bytes},
+            )
         except Exception as e:
-            return ActionResult(success=False, action_type=ActionType.DESKTOP_SCREENSHOT, error=str(e))
+            return ActionResult(
+                success=False, action_type=ActionType.DESKTOP_SCREENSHOT, error=str(e)
+            )
 
 
-def create_desktop_controller(backend: DesktopBackendType = DesktopBackendType.MSS, **kwargs) -> DesktopController:
+def create_desktop_controller(
+    backend: DesktopBackendType = DesktopBackendType.MSS, **kwargs
+) -> DesktopController:
     """Factory: create the appropriate desktop controller."""
     if backend == DesktopBackendType.PYAUTOGUI:
         return PyAutoGUIController()

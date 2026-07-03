@@ -8,7 +8,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 
-class ActionStatus(str, enum.Enum):
+class ActionStatus(enum.StrEnum):
     PENDING = "pending"
     RUNNING = "running"
     SUCCEEDED = "succeeded"
@@ -19,6 +19,7 @@ class ActionStatus(str, enum.Enum):
 
 class ActionRecord(BaseModel):
     """Record of a single action within a session."""
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     session_id: str = ""
     type: str = ""

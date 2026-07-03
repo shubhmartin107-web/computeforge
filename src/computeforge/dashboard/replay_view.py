@@ -14,7 +14,12 @@ def create_replay_tab(storage: StorageBackend, run_async: Callable) -> None:
         try:
             sessions = run_async(storage.list_sessions(limit=50))
             return [
-                [s.id[:8] + "...", s.status.value, str(s.action_count), s.created_at.strftime("%Y-%m-%d %H:%M")]
+                [
+                    s.id[:8] + "...",
+                    s.status.value,
+                    str(s.action_count),
+                    s.created_at.strftime("%Y-%m-%d %H:%M"),
+                ]
                 for s in sessions
             ]
         except Exception:
@@ -29,13 +34,28 @@ def create_replay_tab(storage: StorageBackend, run_async: Callable) -> None:
                     target = s
                     break
             if target is None:
-                return "Session not found", "", gr.Slider(minimum=0, maximum=1, value=0, step=1, label="Step"), "No actions", None, ""
+                return (
+                    "Session not found",
+                    "",
+                    gr.Slider(minimum=0, maximum=1, value=0, step=1, label="Step"),
+                    "No actions",
+                    None,
+                    "",
+                )
 
             actions = run_async(storage.load_actions(target.id))
             action_texts = []
             for i, a in enumerate(actions):
-                icon = "✅" if a.status.value == "succeeded" else "❌" if a.status.value == "failed" else "🚫"
-                action_texts.append(f"**Step {i}:** {icon} `{a.type}` ({a.duration_ms:.0f}ms)\n> Params: {a.params}")
+                icon = (
+                    "✅"
+                    if a.status.value == "succeeded"
+                    else "❌"
+                    if a.status.value == "failed"
+                    else "🚫"
+                )
+                action_texts.append(
+                    f"**Step {i}:** {icon} `{a.type}` ({a.duration_ms:.0f}ms)\n> Params: {a.params}"
+                )
 
             replay_text = "\n\n".join(action_texts) if action_texts else "No actions recorded"
 
@@ -43,9 +63,23 @@ def create_replay_tab(storage: StorageBackend, run_async: Callable) -> None:
             state["session_id"] = target.id
             state["actions"] = actions
 
-            return target.id, target.status.value, gr.Slider(minimum=0, maximum=max(1, max_step), value=0, step=1, label="Step"), replay_text, None, ""
+            return (
+                target.id,
+                target.status.value,
+                gr.Slider(minimum=0, maximum=max(1, max_step), value=0, step=1, label="Step"),
+                replay_text,
+                None,
+                "",
+            )
         except Exception as e:
-            return f"Error: {e}", "", gr.Slider(minimum=0, maximum=1, value=0, step=1, label="Step"), "Error loading", None, ""
+            return (
+                f"Error: {e}",
+                "",
+                gr.Slider(minimum=0, maximum=1, value=0, step=1, label="Step"),
+                "Error loading",
+                None,
+                "",
+            )
 
     def update_step_view(step_index: int, state: dict) -> tuple:
         actions = state.get("actions", [])
@@ -53,7 +87,13 @@ def create_replay_tab(storage: StorageBackend, run_async: Callable) -> None:
             return "No data for this step", "N/A", "N/A"
 
         action = actions[step_index]
-        icon = "✅" if action.status.value == "succeeded" else "❌" if action.status.value == "failed" else "🚫"
+        icon = (
+            "✅"
+            if action.status.value == "succeeded"
+            else "❌"
+            if action.status.value == "failed"
+            else "🚫"
+        )
         detail = f"### Step {step_index}: {icon} `{action.type}`\n\n"
         detail += f"**Status:** {action.status.value}\n"
         detail += f"**Duration:** {action.duration_ms:.0f}ms\n"
@@ -73,7 +113,7 @@ def create_replay_tab(storage: StorageBackend, run_async: Callable) -> None:
                 img_data = storage.load_screenshot(screenshot_path)
                 if img_data:
                     screenshot_img = img_data
-            except Exception:
+            except Exception:  # nosec
                 pass
 
         risk_info = f"Risk: {action.risk_score}" if action.risk_score else "Risk: N/A"
@@ -102,12 +142,16 @@ def create_replay_tab(storage: StorageBackend, run_async: Callable) -> None:
                 session_id_display = gr.Textbox(label="Session ID", interactive=False, scale=2)
                 session_status_display = gr.Textbox(label="Status", interactive=False, scale=1)
 
-            step_slider = gr.Slider(minimum=0, maximum=1, value=0, step=1, label="Step", interactive=True)
+            step_slider = gr.Slider(
+                minimum=0, maximum=1, value=0, step=1, label="Step", interactive=True
+            )
 
             with gr.Row():
                 with gr.Column(scale=1):
                     risk_info = gr.Markdown("### Risk Assessment")
-                    step_actions = gr.Textbox(label="All Steps", lines=8, max_lines=20, interactive=False)
+                    step_actions = gr.Textbox(
+                        label="All Steps", lines=8, max_lines=20, interactive=False
+                    )
 
                 with gr.Column(scale=1):
                     screenshot_display = gr.Image(label="Screenshot", type="pil", height=400)
@@ -121,7 +165,14 @@ def create_replay_tab(storage: StorageBackend, run_async: Callable) -> None:
     load_btn.click(
         fn=load_replay_data,
         inputs=[session_input, state],
-        outputs=[session_id_display, session_status_display, step_slider, step_actions, screenshot_display, risk_info],
+        outputs=[
+            session_id_display,
+            session_status_display,
+            step_slider,
+            step_actions,
+            screenshot_display,
+            risk_info,
+        ],
     )
 
     step_slider.change(

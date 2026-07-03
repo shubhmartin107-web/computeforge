@@ -48,7 +48,7 @@ def create_dashboard(storage: StorageBackend | None = None) -> gr.Blocks:
             with gr.Tab("🛡️ Intervention"):
                 create_intervention_tab()
 
-            with gr.Tab("ℹ️ About"):
+            with gr.Tab("About"):
                 gr.Markdown(f"""
                 ## ComputeForge v{__version__}
 

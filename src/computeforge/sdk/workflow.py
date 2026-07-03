@@ -11,6 +11,7 @@ from computeforge.core.engine import ComputeEngine
 @dataclass
 class WorkflowStep:
     """A single step in a workflow."""
+
     name: str = ""
     action_type: ActionType = ActionType.SCREENSHOT
     params: dict[str, Any] = field(default_factory=dict)
@@ -32,12 +33,16 @@ class Workflow:
         self._steps.append(step)
         return self
 
-    def add_action(self, action_type: ActionType, params: dict[str, Any] | None = None, name: str = "") -> Workflow:
-        self._steps.append(WorkflowStep(
-            name=name or action_type.value,
-            action_type=action_type,
-            params=params or {},
-        ))
+    def add_action(
+        self, action_type: ActionType, params: dict[str, Any] | None = None, name: str = ""
+    ) -> Workflow:
+        self._steps.append(
+            WorkflowStep(
+                name=name or action_type.value,
+                action_type=action_type,
+                params=params or {},
+            )
+        )
         return self
 
     def navigate(self, url: str) -> Workflow:
@@ -47,7 +52,9 @@ class Workflow:
         return self.add_action(ActionType.CLICK, {"selector": selector}, f"Click {selector}")
 
     def type_text(self, text: str, selector: str | None = None) -> Workflow:
-        return self.add_action(ActionType.TYPE, {"text": text, "selector": selector}, f"Type {text[:20]}")
+        return self.add_action(
+            ActionType.TYPE, {"text": text, "selector": selector}, f"Type {text[:20]}"
+        )
 
     def screenshot(self, name: str = "screenshot") -> Workflow:
         return self.add_action(ActionType.SCREENSHOT, {}, name)
@@ -86,12 +93,15 @@ class Workflow:
                     break
                 except Exception as e:
                     if attempt >= step.max_retries - 1:
-                        result = ActionResult(success=False, action_type=step.action_type, error=str(e))
+                        result = ActionResult(
+                            success=False, action_type=step.action_type, error=str(e)
+                        )
                         self._results.append(result)
                         if step.on_failure == "stop":
                             return self._results
                     else:
                         import asyncio
-                        await asyncio.sleep(2 ** attempt)  # exponential backoff
+
+                        await asyncio.sleep(2**attempt)  # exponential backoff
 
         return self._results

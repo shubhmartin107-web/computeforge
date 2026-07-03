@@ -1,12 +1,12 @@
 from __future__ import annotations
 
+import enum
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from enum import Enum
 from typing import Any
 
 
-class ProviderCapability(str, Enum):
+class ProviderCapability(enum.StrEnum):
     CHAT = "chat"
     ACT = "act"
     VISION = "vision"
@@ -17,6 +17,7 @@ class ProviderCapability(str, Enum):
 @dataclass
 class ProviderConfig:
     """Configuration for an LLM provider."""
+
     model: str = ""
     api_key: str | None = None
     base_url: str | None = None
@@ -29,6 +30,7 @@ class ProviderConfig:
 @dataclass
 class Message:
     """A message in a conversation."""
+
     role: str = "user"
     content: str = ""
     images: list[bytes] | None = None
@@ -37,6 +39,7 @@ class Message:
 @dataclass
 class ProviderResponse:
     """Response from an LLM provider."""
+
     content: str = ""
     tool_calls: list[dict[str, Any]] | None = None
     finish_reason: str = "stop"
@@ -88,9 +91,9 @@ class LLMProvider(ABC):
         prompt += "PARAMS: <json params>\n"
         prompt += "REASONING: <brief explanation>\n"
         prompt += "\nIf the task is complete, respond with:\n"
-        prompt += 'ACTION: finished\n'
-        prompt += 'PARAMS: {}\n'
-        prompt += 'REASONING: Task complete'
+        prompt += "ACTION: finished\n"
+        prompt += "PARAMS: {}\n"
+        prompt += "REASONING: Task complete"
 
         messages = [Message(role="user", content=prompt)]
         if screenshot:
@@ -112,6 +115,7 @@ class LLMProvider(ABC):
                 params_str = line.split(":", 1)[1].strip()
                 try:
                     import json
+
                     params = json.loads(params_str)
                 except json.JSONDecodeError:
                     params = {"raw": params_str}

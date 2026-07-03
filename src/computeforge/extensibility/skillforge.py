@@ -31,6 +31,7 @@ class SkillForgeAdapter:
         if self._endpoint:
             try:
                 import httpx
+
                 self._client = httpx.AsyncClient(
                     base_url=self._endpoint,
                     timeout=10.0,
@@ -42,12 +43,14 @@ class SkillForgeAdapter:
 
         if self._local:
             try:
-                import skillforge
+                import skillforge  # noqa: F401
                 self._skillforge_available = True
                 self._enabled = True
                 logger.info("Local SkillForge available")
             except ImportError:
-                logger.info("SkillForge not installed locally (pip install skillforge for integration)")
+                logger.info(
+                    "SkillForge not installed locally (pip install skillforge for integration)"
+                )
 
     async def close(self) -> None:
         if self._client:
@@ -69,6 +72,7 @@ class SkillForgeAdapter:
         if self._skillforge_available:
             try:
                 from skillforge import SkillRegistry
+
                 registry = SkillRegistry()
                 return [
                     {"name": skill.name, "description": skill.description, "version": skill.version}
@@ -96,6 +100,7 @@ class SkillForgeAdapter:
         if self._skillforge_available:
             try:
                 from skillforge import SkillContext, SkillRegistry
+
                 registry = SkillRegistry()
                 skill = registry.get(skill_name)
                 if skill is None:
@@ -119,17 +124,22 @@ class SkillForgeAdapter:
             try:
                 resp = await self._client.get(f"/api/v1/skills/{skill_name}")
                 return resp.json()
-            except Exception:
+            except Exception:  # nosec
                 pass
 
         if self._skillforge_available:
             try:
                 from skillforge import SkillRegistry
+
                 registry = SkillRegistry()
                 skill = registry.get(skill_name)
                 if skill:
-                    return {"name": skill.name, "description": skill.description, "version": skill.version}
-            except Exception:
+                    return {
+                        "name": skill.name,
+                        "description": skill.description,
+                        "version": skill.version,
+                    }
+            except Exception:  # nosec
                 pass
 
         return None

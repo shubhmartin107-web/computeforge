@@ -32,7 +32,7 @@ async def get_replay_data(session_id: str):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
     finally:
         await replay._storage.close()
 
@@ -47,7 +47,9 @@ async def get_replay_step(session_id: str, step_index: int):
             raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
         action = await replay.get_action_at_index(session_id, step_index)
         if action is None:
-            raise HTTPException(status_code=404, detail=f"Step {step_index} not found in session {session_id}")
+            raise HTTPException(
+                status_code=404, detail=f"Step {step_index} not found in session {session_id}"
+            )
         return {
             "session_id": session_id,
             "step_index": step_index,
@@ -56,6 +58,6 @@ async def get_replay_step(session_id: str, step_index: int):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
     finally:
         await replay._storage.close()

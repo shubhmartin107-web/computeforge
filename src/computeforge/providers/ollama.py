@@ -27,10 +27,11 @@ class OllamaProvider(LLMProvider):
         if not self._initialized:
             try:
                 import httpx
-                self._client = httpx.AsyncClient(base_url=self.config.base_url, timeout=120.0)
+
+                self._client = httpx.AsyncClient(base_url=self.config.base_url, timeout=120.0)  # type: ignore[arg-type]
                 self._initialized = True
             except ImportError:
-                raise ImportError("httpx is required")
+                raise ImportError("httpx is required") from None
 
     async def shutdown(self) -> None:
         if self._client:
@@ -45,13 +46,16 @@ class OllamaProvider(LLMProvider):
             images: list[str] = []
             if msg.images:
                 import base64
+
                 for img in msg.images:
                     images.append(base64.b64encode(img).decode("utf-8"))
-            api_messages.append({
-                "role": msg.role,
-                "content": content,
-                "images": images if images else None,
-            })
+            api_messages.append(
+                {
+                    "role": msg.role,
+                    "content": content,
+                    "images": images if images else None,
+                }
+            )
 
         payload = {
             "model": self.config.model,
